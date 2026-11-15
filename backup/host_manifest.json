@@ -1,0 +1,60 @@
+{
+  "generated": "2026-11-16",
+  "purpose": "Everything needed to rebuild the MESHWEAVE POC environment on a different set of hosts.",
+  "hosts_in_use": {
+    "meshweave-host-a": {"gpu": "GTX 1660 SUPER", "vram_mib": 6144, "ram_gb": 62, "cores": 40, "endpoint": "1.208.108.242:51400", "role": "stage 0: embedding + layers 0-10", "state_at_backup": "BLOCKED - 276 MiB free, host-level allocation"},
+    "meshweave-host-b": {"gpu": "Quadro RTX 4000", "vram_mib": 8192, "ram_gb": 15, "cores": 8, "endpoint": "83.63.1.187:24014", "role": "stage 1: layers 11-20", "state_at_backup": "AVAILABLE - 7786 MiB free"},
+    "meshweave-host-c": {"gpu": "RTX 2070 SUPER", "vram_mib": 8192, "ram_gb": 31, "cores": 12, "endpoint": "1.208.108.242:46079", "role": "stage 2: layers 21-31 + final norm + head", "state_at_backup": "BLOCKED - 2270 MiB free, host-level allocation"}
+  },
+  "ssh": {
+    "key": "~/.ssh/id_rsa_vastai",
+    "user": "root",
+    "aliases": ["meshweave-host-a", "meshweave-host-b", "meshweave-host-c"],
+    "note": "Aliases live in ~/.ssh/config. Public key must be authorised on each new instance."
+  },
+  "models": {
+    "/root/models/phi-mini-moe-Q6_K.gguf": {
+      "bytes": 6771299136, "gib": 6.306,
+      "sha256": "e4dfec6cc802585e5e1478c35649a5b25e09790ac5892d4153ce8d3f0de8538d",
+      "url": "https://huggingface.co/gabriellarson/Phi-mini-MoE-instruct-GGUF/resolve/main/Phi-mini-MoE-instruct-Q6_K.gguf",
+      "used_for": "Phases 3B-3D.2 distributed inference"
+    },
+    "/root/models/phi-mini-moe-Q8_0.gguf": {
+      "bytes": 8135148352, "gib": 7.576,
+      "sha256": "4784fad3cf824d235693341c305e5c9a9b60c25c7879710cca5672c24939c51f",
+      "url": "https://huggingface.co/gabriellarson/Phi-mini-MoE-instruct-GGUF/resolve/main/Phi-mini-MoE-instruct-Q8_0.gguf",
+      "used_for": "Phase 4/4.1 capacity claim; cannot be GPU-resident on any GPU"
+    }
+  },
+  "llama_cpp": {
+    "repo": "https://github.com/ggml-org/llama.cpp",
+    "build_version": "b1-de32b26",
+    "clone_and_build": "git clone --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp && cmake -B build -DGGML_CUDA=ON -DGGML_RPC=ON -DCMAKE_CUDA_ARCHITECTURES=75 -DLLAMA_CURL=OFF && cmake --build build --target llama-cli llama-server llama-tokenize ggml-rpc-server -j 8",
+    "binaries": ["llama-cli", "llama-server", "llama-tokenize", "ggml-rpc-server"],
+    "gpu_arches": "75 covers all three cards (Turing: 1660S 7.5, Quadro RTX 4000 7.5, 2070S 7.5)",
+    "note": "GGML_RPC=ON is required for ggml-rpc-server; the default target does not build it."
+  },
+  "python": {
+    "interpreter": "/venv/main/bin/python",
+    "version": "3.12.15",
+    "packages": {"torch": "2.14.1+cu132", "gguf": "0.19.0", "numpy": "2.5.4"},
+    "install": "/venv/main/bin/pip install gguf numpy"
+  },
+  "ports": {
+    "note": "Vast maps only ports requested at rent time. 10100 and 10200 are free on all three instances and are what the pipeline uses.",
+    "host_a": {"internal_10100": 51452, "internal_10200": 51440},
+    "host_b": {"internal_10100": 32892, "internal_10200": 33774},
+    "host_c": {"internal_10100": 46024, "internal_10200": 46092}
+  },
+  "repo_remote": "none - the repository is local to this machine; archive at ~/Downloads/meshweave-backups/",
+  "resume_checklist": [
+    "1. Authorise ~/.ssh/id_rsa_vastai.pub on each new instance",
+    "2. Add ~/.ssh/config aliases meshweave-host-a/b/c with the new IPs and ports",
+    "3. Rebuild llama.cpp per llama_cpp.clone_and_build (GGML_RPC=ON is essential)",
+    "4. Download both GGUF files and verify SHA-256 against this manifest",
+    "5. pip install gguf numpy into /venv/main",
+    "6. Re-run network benchmark: uv run python -m experiments.network.exp_net_002 (the pipeline assumes ~310 ms WAN RTT and 0.5 ms A-C)",
+    "7. Restart the chain and verify with docs/PHASE_3B_THREE_HOST_DISTRIBUTED_INFERENCE.md",
+    "8. If link characteristics changed materially, re-derive the partition: the 11/10/11 split assumed measured VRAM"
+  ]
+}

@@ -92,8 +92,10 @@ structural:
 
 1. **Two WAN hops at ~310 ms each** add ~450 ms to every token. Nothing in the
    pipeline can remove that.
-2. **System RAM is plentiful here** — 62 GB per host — so offloading 2 of 32
-   layers costs very little. The GPUs are small (6–8 GB), the RAM is not.
+2. **System RAM is plentiful relative to the model** — 15 GB on HOST-B, 31 GB on
+   HOST-C, 62 GB on HOST-A — so offloading 2 of 32 layers (~474 MiB) costs very
+   little. The GPU offload baseline was measured on HOST-B, the smallest at 15 GB,
+   and still ran 58 tok/s. The GPUs are small (6–8 GB); the RAM is not.
 3. The distributed topology buys **capacity**, and capacity was never in short
    supply for a 7.6 GiB model on a machine with 62 GB of RAM.
 
@@ -111,8 +113,9 @@ Every experiment that measured it lost to a simpler alternative:
 | Single GPU, quantised to fit | ~200× |
 
 The distributed path wins only where **no single machine can hold the model in
-RAM either** — which is not this fleet. With 62 GB RAM per host, any model that fits
-in 22 GB of VRAM also fits in one machine's RAM.
+RAM either** — which is not this fleet. Even the smallest host has 15 GB of RAM
+against 7.6 GiB of weights; a model would need to exceed 15 GB and fail to fit any
+single GPU before distribution became necessary.
 
 ### Where it could still matter
 
