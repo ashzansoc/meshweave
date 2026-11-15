@@ -1,0 +1,29 @@
+{
+  "phase": "3B",
+  "topology": {"host_a": "layers 0-10 + embed", "host_b": "layers 11-20", "host_c": "layers 21-31 + final norm + head"},
+  "weights": "loaded from local GGUF on each host; never transferred",
+  "forward_pass_parity": {
+    "measured": true, "trials": 3, "reproducible": true,
+    "max_abs_error": 0.1823, "mean_abs_error": 0.04081,
+    "cosine_similarity": 0.9999994, "top1_matches_reference": true,
+    "note": "single-GPU parity was 0.149/0.0256/0.99999917; the small increase is fp16 activation serialisation at the two stage boundaries"
+  },
+  "token_generation": {
+    "measured": true, "prefill_ms": 13782.2,
+    "generated_ids": [29871, 13, 32001, 7803, 29889],
+    "first_token": 29871, "first_token_matches_reference": true,
+    "per_token_ms": [3351.9, 2729.1, 5583.9, 2617.9]
+  },
+  "bug_found_and_fixed": {
+    "name": "position propagation through the chain",
+    "symptom": "cosine 0.99998 but mean abs error 3.26 (a near-constant offset)",
+    "cause": "each stage advanced `pos` by its own sequence length, so stage 1 rotated RoPE at positions 12-23 for a prefill starting at 0",
+    "fix": "pass the absolute start position unchanged through every stage",
+    "result_after": "mean abs error 3.26 -> 0.04081"
+  },
+  "performance": {
+    "prefill_13.8s": "dominated by two WAN hops plus compute",
+    "decode_2.6-5.6s_per_token": "vs 7.5ms on HOST-C standalone; ~350-750x slower",
+    "note": "expected: every token crosses A->B (311ms) and B->C (309ms) boundaries"
+  }
+}
