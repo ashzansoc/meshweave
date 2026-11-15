@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import struct
 import time
@@ -42,7 +43,9 @@ import torch
 from meshweave.runtime.gguf_stage import LAYERS, GgufStageLoader
 from meshweave.runtime.phimoe_forward import StageExecutor
 
-MODEL = "/root/models/phi-mini-moe-Q6_K.gguf"
+# Phase 4 uses Q8_0 (7,576 MiB), which no single participating GPU can hold.
+# Overridable so earlier phases remain reproducible.
+MODEL = os.environ.get("MESHWEAVE_MODEL", "/root/models/phi-mini-moe-Q6_K.gguf")
 PROTO = "meshweave-pipeline/1"
 HEADER_LEN = struct.Struct(">I")  # 4-byte big-endian JSON length
 
