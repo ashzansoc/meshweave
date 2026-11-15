@@ -1,0 +1,44 @@
+{
+  "phase": "3",
+  "milestone": "one distributed forward pass",
+  "status": "PARTIAL - execution works, numerics do NOT match llama.cpp",
+  "measured": {
+    "local_gguf_loading": {
+      "status": "WORKS",
+      "evidence": "layer-range load with shape validation; 4.2s per layer; all 32 layers dequantised and placed",
+      "tensor_count": 517,
+      "orientation": "GGUF arrays are [out,in]; normalised to [in,out] for PyTorch matmul"
+    },
+    "three_stage_execution_on_one_gpu": {
+      "status": "WORKS",
+      "stages": [
+        {"stage": 0, "layers": "0-10", "peak_vram_mib": 4821},
+        {"stage": 1, "layers": "10-20", "peak_vram_mib": 4571},
+        {"stage": 2, "layers": "20-32", "peak_vram_mib": 5736}
+      ],
+      "hidden_shape_each_stage": [1, 12, 4096],
+      "note": "All 32 layers execute, residuals and shapes propagate correctly."
+    },
+    "numerical_correctness": {
+      "status": "FAIL",
+      "prompt_token_ids": [1724, 338, 29871, 29906, 29974, 29906, 29973, 673, 297, 697, 1734, 29889],
+      "llama_cpp_next_token_text": "4",
+      "my_top1_token_id": 29871,
+      "my_top1_token_text": "' ' (space)",
+      "my_top5_values": [67.375, 66.562, 66.5, 66.375, 65.562],
+      "diagnosis": "Distribution is nearly flat (67.4 vs 66.5 across top-5). A correct run shows a clearly dominant top-1. This indicates a structural bug, not rounding."
+    }
+  },
+  "likely_causes_unverified": [
+    "Missing BOS token: llama.cpp prepends BOS automatically; the tokenizer output starts at 1724 with no BOS. A missing BOS shifts every position embedding.",
+    "RMSNorm bias: this model carries attn/ffn norm biases, which is unusual; if they are applied at the wrong stage the residual stream is wrong.",
+    "RoPE convention: rotate_half pairing and the offset may not match the reference layout.",
+    "Expert weight orientation: gate/up/down may need a different transpose than assumed.",
+    "Attention mask or GQA head grouping."
+  ],
+  "not_claimed": [
+    "No three-node forward pass",
+    "No token generation",
+    "No throughput or latency figures"
+  ]
+}
