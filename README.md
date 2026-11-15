@@ -99,6 +99,18 @@ uv run python -m experiments.exp011_distributed_vram --dry-run
 
 Without a key, the experiment blocks and tells you exactly why and what to run.
 
+## Dashboard
+
+```bash
+uv run meshweave coordinator --port 8700   # terminal 1
+cd dashboard && npm install && npm run dev # terminal 2
+```
+
+Every numeric field in the dashboard is nullable and renders **not measured**
+rather than zero. A chart of zeros would be a fabrication, so there isn't one.
+Reliability shows as *unknown* until a node has been observed for ten heartbeats,
+because a node that has never been seen is not 100% reliable — it is unknown.
+
 ## Documentation
 
 | Document | Contents |

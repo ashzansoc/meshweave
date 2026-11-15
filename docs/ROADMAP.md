@@ -129,7 +129,7 @@ adds overhead.
 | Enforce TLS for non-loopback coordinator binds | medium | documented, not enforced |
 | Resource quotas on reported telemetry | medium | a node can currently over-report VRAM |
 | Rate limiting on agent endpoints | low | DoS resistance |
-| Dashboard (React + TS + Tailwind) | low | reads real telemetry only; no fabricated charts |
+| Dashboard (React + TS + Tailwind) | done | every field nullable; renders 'not measured' rather than 0 |
 | `mypy --strict` clean | medium | in progress |
 
 ---
