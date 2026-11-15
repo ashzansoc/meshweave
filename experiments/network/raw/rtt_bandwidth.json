@@ -1,0 +1,576 @@
+{
+  "experiment": "EXP-NET-005",
+  "paths": [
+    {
+      "source": "meshweave-host-a",
+      "target": "meshweave-host-b",
+      "endpoint": "83.63.1.187:32892",
+      "rtt": {
+        "ok": true,
+        "probes": 60,
+        "failed_probes": 0,
+        "min_ms": 300.39754998870194,
+        "p50_ms": 311.3903710618615,
+        "p90_ms": 344.86458101309836,
+        "p95_ms": 348.7552779261023,
+        "p99_ms": 403.22269196622074,
+        "max_ms": 425.23443000391126,
+        "mean_ms": 318.9497014662872,
+        "jitter_ms": 20.101788145947758
+      },
+      "payloads": [
+        {
+          "ok": true,
+          "bytes": 1024,
+          "received": 1024,
+          "truncated": false,
+          "seconds": 0.29866460198536515,
+          "throughput_mbps": 0.02742876104347115,
+          "throughput_mib_s": 0.003269763117250341,
+          "requested_bytes": 1024
+        },
+        {
+          "ok": true,
+          "bytes": 4096,
+          "received": 4096,
+          "truncated": false,
+          "seconds": 0.3279957959894091,
+          "throughput_mbps": 0.09990371950089894,
+          "throughput_mib_s": 0.011909451425182693,
+          "requested_bytes": 4096
+        },
+        {
+          "ok": true,
+          "bytes": 8192,
+          "received": 8192,
+          "truncated": false,
+          "seconds": 0.3426465839147568,
+          "throughput_mbps": 0.19126412775299687,
+          "throughput_mib_s": 0.02280046078598462,
+          "requested_bytes": 8192
+        },
+        {
+          "ok": true,
+          "bytes": 16384,
+          "received": 16384,
+          "truncated": false,
+          "seconds": 0.6146813840605319,
+          "throughput_mbps": 0.21323567526016446,
+          "throughput_mib_s": 0.025419673354645306,
+          "requested_bytes": 16384
+        },
+        {
+          "ok": true,
+          "bytes": 65536,
+          "received": 65536,
+          "truncated": false,
+          "seconds": 0.9866388500668108,
+          "throughput_mbps": 0.531387954127792,
+          "throughput_mib_s": 0.06334638048741723,
+          "requested_bytes": 65536
+        },
+        {
+          "ok": true,
+          "bytes": 262144,
+          "received": 262144,
+          "truncated": false,
+          "seconds": 1.707832643063739,
+          "throughput_mbps": 1.2279610701420063,
+          "throughput_mib_s": 0.14638436676764563,
+          "requested_bytes": 262144
+        },
+        {
+          "ok": true,
+          "bytes": 1048576,
+          "received": 1048576,
+          "truncated": false,
+          "seconds": 4.13111407100223,
+          "throughput_mbps": 2.0305921976066084,
+          "throughput_mib_s": 0.24206545324404338,
+          "requested_bytes": 1048576
+        }
+      ],
+      "sustained_15s": {
+        "ok": true,
+        "bytes": 2949120,
+        "seconds": 15.310445134993643,
+        "throughput_mbps": 1.5409715257772483
+      }
+    },
+    {
+      "source": "meshweave-host-b",
+      "target": "meshweave-host-a",
+      "endpoint": "1.208.108.242:51452",
+      "rtt": {
+        "ok": true,
+        "probes": 60,
+        "failed_probes": 0,
+        "min_ms": 306.5323759801686,
+        "p50_ms": 308.0564299598336,
+        "p90_ms": 354.10581494215876,
+        "p95_ms": 396.6001160442829,
+        "p99_ms": 472.5209770258516,
+        "max_ms": 529.603956034407,
+        "mean_ms": 327.3239893974581,
+        "jitter_ms": 33.32834187855597
+      },
+      "payloads": [
+        {
+          "ok": true,
+          "bytes": 1024,
+          "received": 1024,
+          "truncated": false,
+          "seconds": 0.2942824630299583,
+          "throughput_mbps": 0.027837200748065116,
+          "throughput_mib_s": 0.0033184529242593188,
+          "requested_bytes": 1024
+        },
+        {
+          "ok": true,
+          "bytes": 4096,
+          "received": 4096,
+          "truncated": false,
+          "seconds": 0.3146154179703444,
+          "throughput_mbps": 0.10415255619509628,
+          "throughput_mib_s": 0.012415952228915247,
+          "requested_bytes": 4096
+        },
+        {
+          "ok": true,
+          "bytes": 8192,
+          "received": 8192,
+          "truncated": false,
+          "seconds": 0.31909509492106736,
+          "throughput_mbps": 0.2053807816012065,
+          "throughput_mib_s": 0.024483297062063994,
+          "requested_bytes": 8192
+        },
+        {
+          "ok": true,
+          "bytes": 16384,
+          "received": 16384,
+          "truncated": false,
+          "seconds": 0.6522350179729983,
+          "throughput_mbps": 0.20095823804024304,
+          "throughput_mib_s": 0.023956088786154156,
+          "requested_bytes": 16384
+        },
+        {
+          "ok": true,
+          "bytes": 65536,
+          "received": 65536,
+          "truncated": false,
+          "seconds": 0.8917856080224738,
+          "throughput_mbps": 0.5879081197134407,
+          "throughput_mib_s": 0.07008410927217491,
+          "requested_bytes": 65536
+        },
+        {
+          "ok": true,
+          "bytes": 262144,
+          "received": 262144,
+          "truncated": false,
+          "seconds": 2.33831816597376,
+          "throughput_mbps": 0.896863408289295,
+          "throughput_mib_s": 0.10691444972625912,
+          "requested_bytes": 262144
+        },
+        {
+          "ok": true,
+          "bytes": 1048576,
+          "received": 1048576,
+          "truncated": false,
+          "seconds": 6.671797396033071,
+          "throughput_mbps": 1.2573235519693258,
+          "throughput_mib_s": 0.14988464736572812,
+          "requested_bytes": 1048576
+        }
+      ],
+      "sustained_15s": {
+        "ok": true,
+        "bytes": 3080192,
+        "seconds": 15.144978303927928,
+        "throughput_mbps": 1.627043334463483
+      }
+    },
+    {
+      "source": "meshweave-host-a",
+      "target": "meshweave-host-c",
+      "endpoint": "1.208.108.242:46024",
+      "rtt": {
+        "ok": true,
+        "probes": 60,
+        "failed_probes": 0,
+        "min_ms": 0.5015099886804819,
+        "p50_ms": 0.6392989307641983,
+        "p90_ms": 0.968417152762413,
+        "p95_ms": 1.1145258322358131,
+        "p99_ms": 1.4715681318193674,
+        "max_ms": 25.6729309912771,
+        "mean_ms": 1.1053930463579793,
+        "jitter_ms": 0.504338490318949
+      },
+      "payloads": [
+        {
+          "ok": true,
+          "bytes": 1024,
+          "received": 1024,
+          "truncated": false,
+          "seconds": 0.0007704210001975298,
+          "throughput_mbps": 10.633147328408283,
+          "throughput_mib_s": 1.267569938708339,
+          "requested_bytes": 1024
+        },
+        {
+          "ok": true,
+          "bytes": 4096,
+          "received": 4096,
+          "truncated": false,
+          "seconds": 0.04902688413858414,
+          "throughput_mbps": 0.6683679898435887,
+          "throughput_mib_s": 0.07967567322773798,
+          "requested_bytes": 4096
+        },
+        {
+          "ok": true,
+          "bytes": 8192,
+          "received": 8192,
+          "truncated": false,
+          "seconds": 0.0010170219466090202,
+          "throughput_mbps": 64.43912072744521,
+          "throughput_mib_s": 7.681741801195766,
+          "requested_bytes": 8192
+        },
+        {
+          "ok": true,
+          "bytes": 16384,
+          "received": 16384,
+          "truncated": false,
+          "seconds": 0.0019927460234612226,
+          "throughput_mbps": 65.77456357049435,
+          "throughput_mib_s": 7.840938993751329,
+          "requested_bytes": 16384
+        },
+        {
+          "ok": true,
+          "bytes": 65536,
+          "received": 65536,
+          "truncated": false,
+          "seconds": 0.009143837029114366,
+          "throughput_mbps": 57.33785481200559,
+          "throughput_mib_s": 6.83520493650503,
+          "requested_bytes": 65536
+        },
+        {
+          "ok": true,
+          "bytes": 262144,
+          "received": 262144,
+          "truncated": false,
+          "seconds": 0.01791898882947862,
+          "throughput_mbps": 117.0351753637998,
+          "throughput_mib_s": 13.95168010756967,
+          "requested_bytes": 262144
+        },
+        {
+          "ok": false,
+          "error": "TimeoutError: timed out",
+          "requested_bytes": 1048576
+        }
+      ],
+      "sustained_15s": {
+        "ok": true,
+        "bytes": 651034624,
+        "seconds": 15.001424086047336,
+        "throughput_mbps": 347.18550466446464
+      }
+    },
+    {
+      "source": "meshweave-host-c",
+      "target": "meshweave-host-a",
+      "endpoint": "1.208.108.242:51452",
+      "rtt": {
+        "ok": true,
+        "probes": 60,
+        "failed_probes": 0,
+        "min_ms": 0.3364398144185543,
+        "p50_ms": 0.46529388055205345,
+        "p90_ms": 0.5955751985311508,
+        "p95_ms": 0.6147976964712143,
+        "p99_ms": 0.9230822324752808,
+        "max_ms": 1.672256737947464,
+        "mean_ms": 0.5098886477450529,
+        "jitter_ms": 0.08276668456146273
+      },
+      "payloads": [
+        {
+          "ok": true,
+          "bytes": 1024,
+          "received": 1024,
+          "truncated": false,
+          "seconds": 0.001373598352074623,
+          "throughput_mbps": 5.963897661661548,
+          "throughput_mib_s": 0.7109520032002387,
+          "requested_bytes": 1024
+        },
+        {
+          "ok": true,
+          "bytes": 4096,
+          "received": 4096,
+          "truncated": false,
+          "seconds": 0.0010006390511989594,
+          "throughput_mbps": 32.74707294377287,
+          "throughput_mib_s": 3.9037553004947747,
+          "requested_bytes": 4096
+        },
+        {
+          "ok": true,
+          "bytes": 8192,
+          "received": 8192,
+          "truncated": false,
+          "seconds": 0.0010974030010402203,
+          "throughput_mbps": 59.71917330085566,
+          "throughput_mib_s": 7.119080221754987,
+          "requested_bytes": 8192
+        },
+        {
+          "ok": true,
+          "bytes": 16384,
+          "received": 16384,
+          "truncated": false,
+          "seconds": 0.0036788838915526867,
+          "throughput_mbps": 35.628196992289574,
+          "throughput_mib_s": 4.247212051426121,
+          "requested_bytes": 16384
+        },
+        {
+          "ok": true,
+          "bytes": 65536,
+          "received": 65536,
+          "truncated": false,
+          "seconds": 0.07952580787241459,
+          "throughput_mbps": 6.592677446812354,
+          "throughput_mib_s": 0.7859083946719592,
+          "requested_bytes": 65536
+        },
+        {
+          "ok": true,
+          "bytes": 262144,
+          "received": 262144,
+          "truncated": false,
+          "seconds": 0.052860268857330084,
+          "throughput_mbps": 39.673502336134824,
+          "throughput_mib_s": 4.729450027481892,
+          "requested_bytes": 262144
+        },
+        {
+          "ok": true,
+          "bytes": 1048576,
+          "received": 1048576,
+          "truncated": false,
+          "seconds": 0.19132180092856288,
+          "throughput_mbps": 43.84554169617188,
+          "throughput_mib_s": 5.226795875569806,
+          "requested_bytes": 1048576
+        }
+      ],
+      "sustained_15s": {
+        "ok": true,
+        "bytes": 369950720,
+        "seconds": 15.000154287088662,
+        "throughput_mbps": 197.3050212255131
+      }
+    },
+    {
+      "source": "meshweave-host-b",
+      "target": "meshweave-host-c",
+      "endpoint": "1.208.108.242:46024",
+      "rtt": {
+        "ok": true,
+        "probes": 60,
+        "failed_probes": 0,
+        "min_ms": 306.9581179879606,
+        "p50_ms": 308.9648470049724,
+        "p90_ms": 368.15554602071643,
+        "p95_ms": 395.5324520356953,
+        "p99_ms": 444.57332708407193,
+        "max_ms": 478.14654000103474,
+        "mean_ms": 327.0576630680201,
+        "jitter_ms": 30.057911956446024
+      },
+      "payloads": [
+        {
+          "ok": true,
+          "bytes": 1024,
+          "received": 1024,
+          "truncated": false,
+          "seconds": 0.3242824140470475,
+          "throughput_mbps": 0.025261931098155353,
+          "throughput_mib_s": 0.003011456858891887,
+          "requested_bytes": 1024
+        },
+        {
+          "ok": true,
+          "bytes": 4096,
+          "received": 4096,
+          "truncated": false,
+          "seconds": 0.7294297959888354,
+          "throughput_mbps": 0.044922760463299675,
+          "throughput_mib_s": 0.005355210359489879,
+          "requested_bytes": 4096
+        },
+        {
+          "ok": true,
+          "bytes": 8192,
+          "received": 8192,
+          "truncated": false,
+          "seconds": 0.6312596319476143,
+          "throughput_mbps": 0.10381782183315434,
+          "throughput_mib_s": 0.012376048783439916,
+          "requested_bytes": 8192
+        },
+        {
+          "ok": true,
+          "bytes": 16384,
+          "received": 16384,
+          "truncated": false,
+          "seconds": 0.6302947020158172,
+          "throughput_mbps": 0.20795351695136216,
+          "throughput_mib_s": 0.02478999101535823,
+          "requested_bytes": 16384
+        },
+        {
+          "ok": true,
+          "bytes": 65536,
+          "received": 65536,
+          "truncated": false,
+          "seconds": 1.3293752439785749,
+          "throughput_mbps": 0.3943867635378125,
+          "throughput_mib_s": 0.04701456588957459,
+          "requested_bytes": 65536
+        },
+        {
+          "ok": true,
+          "bytes": 262144,
+          "received": 262144,
+          "truncated": false,
+          "seconds": 1.8587837900267914,
+          "throughput_mbps": 1.128238803916927,
+          "throughput_mib_s": 0.13449654625856008,
+          "requested_bytes": 262144
+        },
+        {
+          "ok": true,
+          "bytes": 1048576,
+          "received": 1048576,
+          "truncated": false,
+          "seconds": 6.172023264924064,
+          "throughput_mbps": 1.3591342157883468,
+          "throughput_mib_s": 0.16202142426828703,
+          "requested_bytes": 1048576
+        }
+      ],
+      "sustained_15s": {
+        "ok": true,
+        "bytes": 1179648,
+        "seconds": 15.305330466944724,
+        "throughput_mbps": 0.6165945923468759
+      }
+    },
+    {
+      "source": "meshweave-host-c",
+      "target": "meshweave-host-b",
+      "endpoint": "83.63.1.187:32892",
+      "rtt": {
+        "ok": true,
+        "probes": 60,
+        "failed_probes": 0,
+        "min_ms": 319.5718699134886,
+        "p50_ms": 341.9756209477782,
+        "p90_ms": 405.89095605537295,
+        "p95_ms": 415.2335789985955,
+        "p99_ms": 422.77981899678707,
+        "max_ms": 1008.882921654731,
+        "mean_ms": 361.76280428189784,
+        "jitter_ms": 43.29299230633651
+      },
+      "payloads": [
+        {
+          "ok": true,
+          "bytes": 1024,
+          "received": 1024,
+          "truncated": false,
+          "seconds": 0.3287130668759346,
+          "throughput_mbps": 0.024921430954528763,
+          "throughput_mib_s": 0.002970866078678222,
+          "requested_bytes": 1024
+        },
+        {
+          "ok": true,
+          "bytes": 4096,
+          "received": 4096,
+          "truncated": false,
+          "seconds": 0.36232036305591464,
+          "throughput_mbps": 0.09043929997095725,
+          "throughput_mib_s": 0.010781204697007805,
+          "requested_bytes": 4096
+        },
+        {
+          "ok": true,
+          "bytes": 8192,
+          "received": 8192,
+          "truncated": false,
+          "seconds": 0.6818783162161708,
+          "throughput_mbps": 0.09611098995443582,
+          "throughput_mib_s": 0.011457322830490568,
+          "requested_bytes": 8192
+        },
+        {
+          "ok": true,
+          "bytes": 16384,
+          "received": 16384,
+          "truncated": false,
+          "seconds": 0.9600892756134272,
+          "throughput_mbps": 0.13652063753785243,
+          "throughput_mib_s": 0.016274528209907105,
+          "requested_bytes": 16384
+        },
+        {
+          "ok": true,
+          "bytes": 65536,
+          "received": 65536,
+          "truncated": false,
+          "seconds": 1.4139588209800422,
+          "throughput_mbps": 0.37079439105348616,
+          "throughput_mib_s": 0.04420213592690064,
+          "requested_bytes": 65536
+        },
+        {
+          "ok": true,
+          "bytes": 262144,
+          "received": 262144,
+          "truncated": false,
+          "seconds": 1.5640154290013015,
+          "throughput_mbps": 1.340876797704695,
+          "throughput_mib_s": 0.15984497042950332,
+          "requested_bytes": 262144
+        },
+        {
+          "ok": true,
+          "bytes": 1048576,
+          "received": 1048576,
+          "truncated": false,
+          "seconds": 2.7082643057219684,
+          "throughput_mbps": 3.0974111286984476,
+          "throughput_mib_s": 0.3692401800988254,
+          "requested_bytes": 1048576
+        }
+      ],
+      "sustained_15s": {
+        "ok": true,
+        "bytes": 1572864,
+        "seconds": 15.19600220862776,
+        "throughput_mbps": 0.8280409430880354
+      }
+    }
+  ]
+}

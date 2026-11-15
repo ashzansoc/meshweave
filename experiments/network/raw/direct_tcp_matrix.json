@@ -15,38 +15,56 @@
   },
   "results": [
     {
-      "ok": false,
-      "error": "meshweave-host-a (root@1.208.108.242:51400): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 51400: Connection refused",
+      "ok": true,
+      "connect_s": 0.312589,
+      "bytes": 1310720,
+      "throughput_mbps": 0.776,
+      "roundtrip_ms": 675.876,
       "source": "meshweave-host-a",
       "target": "meshweave-host-b"
     },
     {
-      "ok": false,
-      "error": "meshweave-host-a (root@1.208.108.242:51400): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 51400: Connection refused",
+      "ok": true,
+      "connect_s": 0.003002,
+      "bytes": 1310720,
+      "throughput_mbps": 46.204,
+      "roundtrip_ms": 11.347,
       "source": "meshweave-host-a",
       "target": "meshweave-host-c"
     },
     {
-      "ok": false,
-      "error": "meshweave-host-b (root@83.63.1.187:24014): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 83.63.1.187 port 24014: Connection refused",
+      "ok": true,
+      "connect_s": 0.305408,
+      "bytes": 1310720,
+      "throughput_mbps": 0.953,
+      "roundtrip_ms": 549.907,
       "source": "meshweave-host-b",
       "target": "meshweave-host-a"
     },
     {
-      "ok": false,
-      "error": "meshweave-host-b (root@83.63.1.187:24014): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 83.63.1.187 port 24014: Connection refused",
+      "ok": true,
+      "connect_s": 0.358296,
+      "bytes": 1310720,
+      "throughput_mbps": 1.424,
+      "roundtrip_ms": 368.17,
       "source": "meshweave-host-b",
       "target": "meshweave-host-c"
     },
     {
-      "ok": false,
-      "error": "meshweave-host-c (root@1.208.108.242:46079): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 46079: Connection refused",
+      "ok": true,
+      "connect_s": 0.00254,
+      "bytes": 1310720,
+      "throughput_mbps": 50.187,
+      "roundtrip_ms": 10.447,
       "source": "meshweave-host-c",
       "target": "meshweave-host-a"
     },
     {
-      "ok": false,
-      "error": "meshweave-host-c (root@1.208.108.242:46079): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 46079: Connection refused",
+      "ok": true,
+      "connect_s": 0.317893,
+      "bytes": 1310720,
+      "throughput_mbps": 1.475,
+      "roundtrip_ms": 355.532,
       "source": "meshweave-host-c",
       "target": "meshweave-host-b"
     }

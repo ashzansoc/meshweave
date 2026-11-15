@@ -41,11 +41,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from meshweave.remote import HOSTS, RAW_DIR, Host, RemoteError  # noqa: E402
+from meshweave.remote.process_registry import REGISTRY  # noqa: E402
 from meshweave.remote.ssh import run_python  # noqa: E402
 
 # Vast maps this internal port to a random external port on all three instances,
 # and it is free on each. Verified before use rather than assumed.
 ECHO_INTERNAL_PORT = 10100
+
+# Identifies this run in the process registry, so cleanup can touch only its own
+# processes. Per the Phase 0 safety audit, termination is by recorded PID.
+EXPERIMENT_ID = "EXP-NET-002"
 
 # The echo server. ``def handle`` must precede the accept loop: placing it after
 # an infinite ``while True`` means it is never defined and the first connection
@@ -112,21 +117,61 @@ print(json.dumps(result))
 """
 
 
-def external_port(record: dict, internal: int = ECHO_INTERNAL_PORT) -> int | None:
-    """Find the externally mapped port for an internal port.
+CAPABILITIES_JSON = """
+import json, subprocess
+out = subprocess.run(["vast-capabilities"], capture_output=True, text=True).stdout
+d = json.loads(out)
+inst = d.get("instance", {})
+print(json.dumps({
+    "open_ports": [
+        {
+            "container_port": p.get("container_port"),
+            "public_port": p.get("public_port"),
+            "in_use": p.get("in_use"),
+            "service": p.get("service"),
+        }
+        for p in inst.get("open_ports", [])
+    ],
+    "public_ip": inst.get("public_ipaddr"),
+    "image": (d.get("image") or {}).get("name"),
+}))
+"""
 
-    Read from the host's own environment, which is the only place Vast publishes
-    the mapping. There is no REST field that returns it.
+
+async def live_ports(host: Host) -> dict:
+    """Query vast-capabilities for the authoritative live port manifest.
+
+    This is the source of truth for what is reachable. The guide is explicit that
+    external ports are fixed at creation and cannot be added at runtime, and that
+    ``in_use`` tells you whether a port is free. Environment variables are a
+        secondary source; the manifest is primary.
     """
-    env = record.get("commands", {}).get("vast_env", {}).get("stdout", "") or ""
-    prefix = f"VAST_TCP_PORT_{internal}="
-    for line in env.splitlines():
-        if line.startswith(prefix):
-            try:
-                return int(line.split("=", 1)[1].strip())
-            except ValueError:
-                return None
-    return None
+    from meshweave.remote.ssh import run_python
+
+    try:
+        result = await run_python(host, CAPABILITIES_JSON, timeout_s=40.0)
+        lines = [ln for ln in result.stdout.splitlines() if ln.strip().startswith("{")]
+        if not lines:
+            return {"error": f"no manifest (exit {result.exit_code})", "open_ports": []}
+        return json.loads(lines[-1])
+    except (RemoteError, json.JSONDecodeError) as exc:
+        return {"error": str(exc), "open_ports": []}
+
+
+def pick_free_port(manifest: dict, count: int = 1) -> list[dict]:
+    """Choose free TCP ports from the live manifest.
+
+    Prefers a *normal* container port (<= 65535) that is not in use. The guide
+    notes that normal ports are NATed to a different external number, which is
+    what MESHWEAVE wants for a listener.
+    """
+    free = [
+        p
+        for p in manifest.get("open_ports", [])
+        if p.get("in_use") is False and isinstance(p.get("container_port"), int)
+        and p["container_port"] <= 65535
+    ]
+    return free[:count]
 
 
 class EchoServer:
@@ -136,10 +181,12 @@ class EchoServer:
     ``nohup`` or ``tmux`` was reaped on two of three Vast hosts.
     """
 
-    def __init__(self, host: Host) -> None:
+    def __init__(self, host: Host, internal_port: int) -> None:
         self.host = host
+        self.internal_port = internal_port
         self.proc: asyncio.subprocess.Process | None = None
         self.reused = False
+        self.pid: int | None = None
 
     async def start(self) -> None:
         """Launch the listener as a foreground process in a held SSH session.
@@ -156,12 +203,19 @@ class EchoServer:
         from meshweave.remote.ssh import _ssh_argv
 
         encoded = base64.b64encode(ECHO_SCRIPT.encode()).decode()
-        remote = f"echo {encoded} | base64 -d | python3 - {ECHO_INTERNAL_PORT}"
+        remote = f"echo {encoded} | base64 -d | python3 - {self.internal_port}"
         argv = _ssh_argv(self.host, remote, 10.0)
         self.proc = await asyncio.create_subprocess_exec(
             *argv,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+        )
+        self.pid = self.proc.pid
+        REGISTRY.record(
+            self.pid,
+            node_id=self.host.node_id,
+            experiment_id=EXPERIMENT_ID,
+            command=f"echo server on internal port {self.internal_port}",
         )
         assert self.proc.stdout is not None
         deadline = asyncio.get_running_loop().time() + 25
@@ -231,29 +285,40 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    inventory_path = RAW_DIR / "host_inventory.json"
-    if not inventory_path.exists():
-        print("host_inventory.json missing; run exp_net_001 first", file=sys.stderr)
-        return 2
-    inventory = json.loads(inventory_path.read_text())
-
     print(f"\n{'=' * 74}")
     print("EXP-NET-002: direct TCP connectivity")
     print(f"{'=' * 74}\n")
 
     endpoints: dict[str, tuple[str, int]] = {}
-    print(f"resolving external endpoints for internal port {ECHO_INTERNAL_PORT}")
-    for record in inventory:
-        node_id = record["node_id"]
-        external = external_port(record)
-        if external is None:
-            print(f"  {record['label']}: no VAST_TCP_PORT_{ECHO_INTERNAL_PORT} mapping")
+    manifests: dict[str, dict] = {}
+
+    print("querying vast-capabilities for the live port manifest")
+    for host in HOSTS:
+        manifest = asyncio.run(live_ports(host))
+        manifests[host.node_id] = manifest
+        if manifest.get("error"):
+            print(f"  {host.label}: manifest unavailable ({manifest['error']})")
             continue
-        endpoints[node_id] = (record["endpoint"]["host"], external)
+        chosen = pick_free_port(manifest, 1)
+        if not chosen:
+            used = [p["container_port"] for p in manifest.get("open_ports", [])]
+            print(f"  {host.label}: no free normal port (open: {used})")
+            continue
+        port = chosen[0]
+        endpoints[host.node_id] = (host.host, int(port["public_port"]))
         print(
-            f"  {record['label']}: internal {ECHO_INTERNAL_PORT} -> "
-            f"{record['endpoint']['host']}:{external}"
+            f"  {host.label}: container {port['container_port']} -> "
+            f"{host.host}:{port['public_port']} (free)"
         )
+
+    # Remember which internal port each host chose, so the listener binds the
+    # number that maps to the external port we will dial.
+    internal_for: dict[str, int] = {}
+    for node_id, (_host, public) in endpoints.items():
+        for entry in manifests.get(node_id, {}).get("open_ports", []):
+            if entry.get("public_port") == public:
+                internal_for[node_id] = int(entry["container_port"])
+                break
 
     if len(endpoints) < 2:
         print(
@@ -264,15 +329,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"\nmeasuring {len(endpoints)} x {len(endpoints) - 1} directed paths\n")
-    results = asyncio.run(_run_all(HOSTS, endpoints))
+    results = asyncio.run(_run_all(HOSTS, endpoints, internal_for))
 
-    print(f"  {'path':<40}{'ok':<5}{'connect':>10}{'throughput':>13}{'RTT':>10}")
+    print(f"  {'path':<40}{'ok':<5}{'connect':>10}{'throughput':>14}{'RTT':>12}")
     for r in results:
         path = f"{r['source']} -> {r['target']}"
         if r.get("ok"):
             print(
                 f"  {path:<40}{'yes':<5}{r.get('connect_s', 0)*1000:>9.1f}ms"
-                f"{r.get('throughput_mbps', 0):>12.1f} fast"
+                f"{r.get('throughput_mbps', 0):>12.2f} Mb/s"
+                f"{r.get('roundtrip_ms', 0):>10.2f}ms"
             )
         else:
             print(f"  {path:<40}{'NO':<5}  {r.get('error', '')[:52]}")
@@ -299,7 +365,11 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-async def _run_all(hosts: list[Host], endpoints: dict[str, tuple[str, int]]) -> list[dict]:
+async def _run_all(
+    hosts: list[Host],
+    endpoints: dict[str, tuple[str, int]],
+    internal_for: dict[str, int],
+) -> list[dict]:
     by_id = {h.node_id: h for h in hosts}
 
     # Start a listener on every host that has a reachable endpoint. Each is a
@@ -310,7 +380,7 @@ async def _run_all(hosts: list[Host], endpoints: dict[str, tuple[str, int]]) -> 
 
     servers: list[EchoServer] = []
     for node_id in endpoints:
-        server = EchoServer(by_id[node_id])
+        server = EchoServer(by_id[node_id], internal_for.get(node_id, ECHO_INTERNAL_PORT))
         try:
             await server.start()
             servers.append(server)

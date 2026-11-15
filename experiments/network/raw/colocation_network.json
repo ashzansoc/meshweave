@@ -1,0 +1,15 @@
+{
+  "network_adjacency": {
+    "a_to_c": {"rtt_p50_ms": 0.64, "rtt_p99_ms": 1.47, "jitter_ms": 0.50, "sustained_mbps": 347.19, "sustained_dir": "c->a", "sustained_mbps_reverse": 197.31},
+    "a_to_b": {"rtt_p50_ms": 311.4, "sustained_mbps": 0.62},
+    "b_to_c": {"rtt_p50_ms": 309.0, "sustained_mbps": 0.83}
+  },
+  "internal_network": {
+    "a": {"ip": "172.17.0.2/16", "gw": "172.17.0.1", "mac": "56:0f:9a:7c:9a:18"},
+    "b": {"ip": "172.17.0.3/16", "gw": "172.17.0.1", "mac": "f2:b6:cb:27:e3:9d"},
+    "c": {"ip": "172.17.0.2/16", "gw": "172.17.0.1", "mac": "36:58:0c:ef:37:e0"},
+    "note": "Each host has its own docker bridge. 172.17.0.2 on A and on C are different interfaces; there is no direct internal path between them."
+  },
+  "kernels": {"a": "5.15.0-186-generic", "b": "7.0.0-42-generic", "c": "6.8.0-147-generic"},
+  "refined_verdict": "different virtual machines, network-adjacent (sub-ms RTT, 200-350 Mbps). The DMI/board identifiers measure virtual hardware and do not prove physical separation. By measurement, A and C form a fast pair."
+}
