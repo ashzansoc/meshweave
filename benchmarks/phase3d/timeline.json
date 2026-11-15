@@ -1,0 +1,18 @@
+{
+  "phase": "3D",
+  "topology": "A(0-10) -> B(11-20) -> C(21-31+head), relay return",
+  "warm_decode_steps": [
+    {"step":0,"total_ms":2861.1,"b_compute_ms":86.65,"c_compute_ms":109.51,"a_chain_roundtrip_ms":2773.5},
+    {"step":1,"total_ms":5629.0,"b_compute_ms":73.19,"c_compute_ms":38.02,"a_chain_roundtrip_ms":5554.82},
+    {"step":2,"total_ms":8118.6,"b_compute_ms":73.3,"c_compute_ms":60.73,"a_chain_roundtrip_ms":8044.34},
+    {"step":3,"total_ms":3638.1,"b_compute_ms":73.6,"c_compute_ms":47.3,"a_chain_roundtrip_ms":3563.82},
+    {"step":4,"total_ms":5384.9,"b_compute_ms":72.25,"c_compute_ms":52.77,"a_chain_roundtrip_ms":5311.85}
+  ],
+  "warm_prefill_12_tokens": {"total_ms":22962.7,"b_compute_ms":837.5,"c_compute_ms":377.8,"chain_rt_ms":22116.14},
+  "compute_share_pct": 5,
+  "rtt_budget_ms": 1240,
+  "observed_ratio_vs_one_rtt_per_hop": [2.24, 4.48, 6.49, 2.87, 4.28],
+  "delayed_ack": "consistent_with_but_not_proven",
+  "direct_return": {"implemented": true, "verified": false, "reason": "benchmark harness did not receive the reply; C->A mapped-port route proven reachable via TCP RST"},
+  "verdict": "physical ceiling: 310ms RTT x 4 hops = 1240ms minimum; observed 2.8s means ~2x per hop"
+}

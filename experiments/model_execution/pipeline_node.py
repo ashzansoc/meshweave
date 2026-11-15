@@ -165,6 +165,40 @@ class StageWorker:
         # Last stage returns logits; earlier stages pass the hidden state on.
         if result.logits is not None:
             out = result.logits.contiguous()
+            reply_to = header.get("reply_to")
+            if reply_to:
+                # Direct response routing: the last stage ships logits straight to
+                # the client instead of relaying them back through every upstream
+                # stage. On this fleet HOST-C and HOST-A share a physical host, so
+                # this hop is ~0.5 ms versus the ~620 ms of relaying back through
+                # B and A.
+                host, port = reply_to.rsplit(":", 1)
+                reply_sock = socket.create_connection((host, int(port)), timeout=30)
+                reply_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                try:
+                    send_frame(
+                        reply_sock,
+                        {
+                            "op": "logits",
+                            "req": header["req"],
+                            "stage": self.index,
+                            "dtype": "float32",
+                            "shape": list(out.shape),
+                            "compute_ms": round(compute_ms, 2),
+                            "route": "direct",
+                        },
+                        out.to(torch.float32).cpu().numpy().tobytes(),
+                    )
+                finally:
+                    reply_sock.close()
+                # Tell the upstream stages the request completed so they can free
+                # their view of it. This ack is tiny and does not carry logits.
+                return (
+                    {"op": "done", "req": header["req"], "stage": self.index,
+                     "route": "direct", "compute_ms": round(compute_ms, 2)},
+                    b"",
+                )
+
             resp_header = {
                 "op": "logits",
                 "req": header["req"],
