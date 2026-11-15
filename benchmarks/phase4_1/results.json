@@ -1,0 +1,34 @@
+{
+  "phase": "4.1",
+  "model": "phi-mini-moe-Q8_0.gguf",
+  "weights_mib": 7576,
+  "host_inspection": {
+    "host_a": {"gpu": "GTX 1660 SUPER", "total_mib": 6144, "free_mib": 276, "blocked_by_pid": 1482890, "pid_holder_mib": 5468},
+    "host_b": {"gpu": "Quadro RTX 4000", "total_mib": 8192, "free_mib": 7786, "blocked": false},
+    "host_c": {"gpu": "RTX 2070 SUPER", "total_mib": 8192, "free_mib": 2270, "blocked_by_pid": 390673, "pid_holder_mib": 5512},
+    "blocker_analysis": "/proc/<pid> ABSENT for both PIDs (43 and 37 pids visible in the container namespace). ps cannot see them. The allocations are therefore outside this container's PID namespace -- host-level or another container on the shared physical machine. They cannot be terminated from here, and ownership cannot be established. Refused to act, per the standing safety rule."
+  },
+  "model_files": {"both_present_all_hosts": true, "q6k_gib": 6.306, "q8_0_gib": 7.576, "identical_sizes": true},
+  "single_gpu_residency_test": {
+    "host": "meshweave-host-b", "command": "llama-cli -ngl 99",
+    "result": "weights loaded, then FAILED allocating the 512 MiB KV cache",
+    "error": "ggml_backend_cuda_buffer_type_alloc_buffer: allocating 512.00 MiB on device 0: cudaMalloc failed: out of memory",
+    "conclusion": "Stronger than the earlier torch OOM: the weights alone nearly fit (7576 of 7786 MiB), but the working set (weights + 512 MiB KV) cannot. The model cannot be GPU-resident."
+  },
+  "cpu_offload_baseline": {
+    "host": "meshweave-host-b",
+    "ngl_30_two_layers_in_ram": {"prompt_tps_cold": 10.9, "gen_tps_cold": 16.5, "prompt_tps_warm": 152.4, "gen_tps_warm": 58.0, "output": "Four.", "correct": true},
+    "ngl_28_four_layers_in_ram": {"prompt_tps_cold": 9.6, "gen_tps_cold": 9.9},
+    "note": "cold = first run; warm = model in page cache"
+  },
+  "distributed_baseline": {
+    "status": "BLOCKED this phase",
+    "reference_from_phase_3d_2": {"model": "phi-mini-moe-Q6_K", "decode_ms_per_token": 452.9, "tokens_per_second": 2.21},
+    "note": "network cost is model-independent (~453 ms/token), so Q8_0 distributed would be similar or worse"
+  },
+  "verdict": {
+    "distributed_capacity": "claim proven (model cannot be GPU-resident on any GPU)",
+    "practical_advantage_over_cpu_offload": "NONE for this model. Single machine with 2 layers offloaded runs 58 tok/s warm; three-host distributed runs 2.2 tok/s. CPU offload is ~26x faster.",
+    "why": "two WAN hops at ~310 ms each dominate; three GPUs of 6-8 GB cannot outrun one machine with 62 GB RAM."
+  }
+}
