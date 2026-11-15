@@ -1,0 +1,25 @@
+{
+  "reference": {
+    "impl": "llama.cpp b1-de32b26",
+    "model": "phi-mini-moe-Q6_K.gguf",
+    "prompt_token_ids": [1724,338,29871,29906,29974,29906,29973,673,297,697,1734,29889],
+    "add_bos_token": false,
+    "reference_next_token_text": "4"
+  },
+  "runs": [
+    {"variant": "phase3_original", "top5_ids": [29871,450,13,32007,376], "top5_values": [67.375,66.562,66.5,66.375,65.562]},
+    {"variant": "moerenorm_removed", "top5_ids": [27137,645,7340,29099,29880,13], "top5_values": [48.94,47.06,45.41,43.03,42.53,41.88]},
+    {"variant": "moerenorm_removed_normbias_off", "top5_ids": [645,18564,7071,27137,16094,3487], "top5_values": [26.58,25.03,24.14,23.58,23.58,23.52]}
+  ],
+  "target_token_id_for_4": null,
+  "diagnosis": "All variants flat (top1-top5 spread < 4 points over 32064 vocab). Structural divergence remains.",
+  "verified_config": {
+    "add_bos_token": false,
+    "rope_type": "NEOX (split-halves) - matches implementation",
+    "rms_epsilon": 1e-05,
+    "rope_freq_base": 10000.0,
+    "expert_count": 16, "expert_used": 2,
+    "norm_biases_nonzero": true
+  },
+  "conclusion": "PARITY NOT ACHIEVED. Intermediate-tensor harness required before further changes."
+}

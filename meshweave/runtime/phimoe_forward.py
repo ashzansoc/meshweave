@@ -311,8 +311,10 @@ class StageExecutor:
         logits = flat.float() @ w["router"].float().t()
         probs = torch.softmax(logits, dim=-1)
         topk_probs, topk_idx = torch.topk(probs, TOP_K, dim=-1)
-        # Renormalise over the selected experts, matching the reference.
-        topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
+        # Do NOT renormalise. Phi's reference `sparsemixer` takes the top-k of a
+        # softmax over ALL experts and uses those probabilities directly, so the
+        # weights sum to less than one. Renormalising scales every MoE output up
+        # by ~1/sum, which compounds over 32 layers and inflates the logits.
 
         if router_choices is not None:
             router_choices[index] = topk_idx.detach()
