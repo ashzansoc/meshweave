@@ -1,0 +1,15 @@
+{
+  "phase": "3D.1",
+  "experiment": "direct response routing vs relay return",
+  "identical_workload": {"tokens": [1724,338,29871,29906,29974,29906,29973,673,297,697,1734,29889], "decode_steps": 4},
+  "relay": {"prefill_ms": 22017.7, "decode_ms": [3399.0,2047.8,2432.9,2773.7], "mean_decode_ms": 2663.3,
+            "tokens": [29871,13,32001,7803,29889]},
+  "direct": {"prefill_ms": 6002.7, "decode_ms": [1027.1,1354.3,1175.7,1545.4], "mean_decode_ms": 1275.6,
+             "tokens": [29871,13,32001,7803,29889]},
+  "improvement": {"decode_speedup": 2.09, "prefill_speedup": 3.67,
+                  "decode_saved_ms_per_token": 1387.7, "prefill_saved_ms": 16015},
+  "correctness": {"identical_token_sequence": true, "sequence": [29871,13,32001,7803,29889]},
+  "root_cause_of_previous_failure": "reply_to was read at stage C but never propagated in the fwd_header built by upstream stages, so stage C always fell back to relay. Two attempts failed before the propagation was added.",
+  "remaining": {"direct_decode_ms": 1275.6, "theoretical_2_forward_hops_ms": 620,
+                "ratio": 2.06, "note": "still ~2 RTT per hop; delayed-ACK experiment not run"}
+}

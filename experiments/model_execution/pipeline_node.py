@@ -230,6 +230,11 @@ class StageWorker:
             "shape": list(out.shape),
             "compute_ms": round(compute_ms, 2),
         }
+        # reply_to must travel down the chain, otherwise the last stage falls back
+        # to relaying the result back through every upstream hop -- which is
+        # exactly the cost direct return exists to remove.
+        if header.get("reply_to"):
+            fwd_header["reply_to"] = header["reply_to"]
         send_started = time.monotonic()
         send_frame(self.downstream, fwd_header, out.to(torch.float16).cpu().numpy().tobytes())
         downstream_header, downstream_payload = recv_frame(self.downstream)
