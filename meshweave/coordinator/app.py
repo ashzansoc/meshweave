@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, status
@@ -43,6 +44,8 @@ from meshweave.registry.store import ResourceRegistry
 from meshweave.topology.graph import TopologyGraph, build_graph
 
 logger = logging.getLogger("meshweave.coordinator")
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 SECRET_PATH = "./reports/.coordinator_secret"
 
@@ -403,6 +406,91 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         require_admin(state, authorization)
         changed = state.registry.reap()
         return {"marked_unreachable": changed}
+
+    # -- experiment reports ---------------------------------------------
+
+    @app.get("/v1/experiments")
+    async def list_experiments() -> dict[str, Any]:
+        """Index the experiment reports written to disk.
+
+        Returns summaries, not full reports, so a dashboard can list them without
+        pulling every measurement. Each entry carries its status and whether it
+        can support a claim of real execution.
+        """
+        import json as _json
+
+        raw_dir = REPO_ROOT / "reports" / "raw"
+        entries: list[dict[str, Any]] = []
+        if raw_dir.is_dir():
+            for path in sorted(raw_dir.glob("*.json")):
+                if path.name.endswith("-topology.json") or "-comparison" in path.name:
+                    continue
+                try:
+                    with path.open() as fh:
+                        data = _json.load(fh)
+                except (OSError, _json.JSONDecodeError):
+                    continue
+                if not isinstance(data, dict) or "experiment_id" not in data:
+                    continue
+                entries.append(
+                    {
+                        "experiment_id": data.get("experiment_id"),
+                        "title": data.get("title"),
+                        "status": data.get("status"),
+                        "synthetic": bool(
+                            (data.get("provenance") or {}).get("synthetic", False)
+                        ),
+                        "measurement_count": len(data.get("measurements") or []),
+                        "failure_count": len(
+                            (data.get("failures") or {}).get("failures") or []
+                        ),
+                        "blocked_reason": data.get("blocked_reason"),
+                        "path": str(path.relative_to(REPO_ROOT)),
+                    }
+                )
+        entries.sort(key=lambda e: str(e.get("experiment_id") or ""))
+        return {
+            "experiments": entries,
+            "total": len(entries),
+            "completed": sum(1 for e in entries if e["status"] == "completed"),
+            "blocked": sum(1 for e in entries if e["status"] == "blocked"),
+        }
+
+    @app.get("/v1/experiments/{experiment_id}")
+    async def get_experiment(experiment_id: str) -> dict[str, Any]:
+        """Return one full experiment report."""
+        import json as _json
+
+        raw_dir = REPO_ROOT / "reports" / "raw"
+        target = raw_dir / f"{experiment_id.lower()}.json"
+        if not target.exists():
+            raise HTTPException(status_code=404, detail=f"no report for {experiment_id}")
+        try:
+            with target.open() as fh:
+                return dict(_json.load(fh))
+        except (OSError, _json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"report unreadable: {exc}"
+            ) from exc
+
+    @app.get("/v1/nodes/{node_id}")
+    async def get_node(node_id: str) -> dict[str, Any]:
+        """One node's full record, including every GPU it reports."""
+        record = state.registry.get(node_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
+
+        environment: str | None = None
+        if state.graph is not None:
+            env = state.graph.environment_by_node.get(node_id)
+            if env is not None:
+                environment = env.value
+
+        return {
+            "node": record.model_dump(mode="json"),
+            "degrade_reason": state.registry.degrade_reasons.get(node_id),
+            "environment": environment,
+        }
 
     return
 

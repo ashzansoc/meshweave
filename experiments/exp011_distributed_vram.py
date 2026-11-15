@@ -229,10 +229,23 @@ async def _run(exp: Experiment, args: argparse.Namespace) -> None:
                 "the agent must report its external IP and mapped port"
             )
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"http://{_agent_host(record)}:{port}/agent/assign",
-                json=assignment.model_dump(mode="json"),
-            )
+            try:
+                resp = await client.post(
+                    f"http://{_agent_host(record)}:{port}/agent/assign",
+                    json=assignment.model_dump(mode="json"),
+                )
+            except httpx.HTTPError as exc:
+                exp.fail(
+                    "stage_load",
+                    f"{stage['node_id']}: agent unreachable at "
+                    f"{_agent_host(record)}:{port}: {exc}",
+                )
+                raise ExperimentBlockedError(
+                    f"agent for {stage['node_id']} is not reachable at "
+                    f"{_agent_host(record)}:{port}. Start the agent on that host and "
+                    "make sure its mapped port is reported to the coordinator.",
+                    "start the agent on that host, then re-run this experiment",
+                ) from exc
             if resp.status_code >= 400:
                 exp.fail("stage_load", f"{stage['node_id']}: {resp.text[:200]}")
                 raise ExperimentBlockedError(f"stage load failed on {stage['node_id']}")
@@ -247,8 +260,22 @@ async def _run(exp: Experiment, args: argparse.Namespace) -> None:
         record = next(n for n in healthy if n["node_id"] == stage["node_id"])
         port = _agent_port(record)
         async with httpx.AsyncClient(timeout=30.0) as client:
-            mem = await client.post(f"http://{_agent_host(record)}:{port}/agent/memory")
-            mem.raise_for_status()
+            try:
+                mem = await client.post(
+                    f"http://{_agent_host(record)}:{port}/agent/memory"
+                )
+                mem.raise_for_status()
+            except httpx.HTTPError as exc:
+                # A memory reading we could not take is a missing measurement,
+                # never a zero.
+                exp.fail("memory_sample", f"{stage['node_id']}: {exc}")
+                exp.measure(
+                    f"stage_{stage['index']}_vram_used_gib",
+                    None,
+                    "GiB",
+                    note=f"agent unreachable on {stage['node_id']}",
+                )
+                continue
             samples = mem.json().get("samples", [])
         used = max((s["vram_used_bytes"] for s in samples), default=0)
         exp.measure(
