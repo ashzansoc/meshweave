@@ -1,0 +1,65 @@
+[
+  {
+    "node_id": "meshweave-host-a",
+    "label": "HOST-A",
+    "endpoint": {
+      "host": "1.208.108.242",
+      "port": 51400,
+      "user": "root"
+    },
+    "claimed": {
+      "gpu_name": "NVIDIA GeForce GTX 1660 SUPER",
+      "vram_gib": 6.0
+    },
+    "collected_at": null,
+    "commands": {},
+    "failed_commands": [],
+    "verified_gpus": [],
+    "verification": {},
+    "auth_ok": false,
+    "auth_detail": "meshweave-host-a (root@1.208.108.242:51400): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo __AUTH_OK__\n  stderr: root@1.208.108.242: Permission denied (publickey).",
+    "error": "authentication failed"
+  },
+  {
+    "node_id": "meshweave-host-b",
+    "label": "HOST-B",
+    "endpoint": {
+      "host": "83.63.1.187",
+      "port": 24014,
+      "user": "root"
+    },
+    "claimed": {
+      "gpu_name": "NVIDIA RTX 4000",
+      "vram_gib": 8.0
+    },
+    "collected_at": null,
+    "commands": {},
+    "failed_commands": [],
+    "verified_gpus": [],
+    "verification": {},
+    "auth_ok": false,
+    "auth_detail": "meshweave-host-b (root@83.63.1.187:24014): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo __AUTH_OK__\n  stderr: root@83.63.1.187: Permission denied (publickey).",
+    "error": "authentication failed"
+  },
+  {
+    "node_id": "meshweave-host-c",
+    "label": "HOST-C",
+    "endpoint": {
+      "host": "1.208.108.242",
+      "port": 46079,
+      "user": "root"
+    },
+    "claimed": {
+      "gpu_name": "NVIDIA GeForce RTX 2070 SUPER",
+      "vram_gib": 8.0
+    },
+    "collected_at": null,
+    "commands": {},
+    "failed_commands": [],
+    "verified_gpus": [],
+    "verification": {},
+    "auth_ok": false,
+    "auth_detail": "meshweave-host-c (root@1.208.108.242:46079): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo __AUTH_OK__\n  stderr: root@1.208.108.242: Permission denied (publickey).",
+    "error": "authentication failed"
+  }
+]
