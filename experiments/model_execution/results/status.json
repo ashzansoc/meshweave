@@ -1,0 +1,30 @@
+{
+  "model": "microsoft/Phi-mini-MoE-instruct (Q6_K GGUF)",
+  "verified_facts": {
+    "total_parameters": 7647632704,
+    "active_parameters_per_token": 2230000000,
+    "layers": 32,
+    "experts_per_layer": 16,
+    "active_experts": 2,
+    "q6k_weight_gib": 6.31,
+    "bf16_weight_gib": 14.24,
+    "kv_bytes_per_token": 131072,
+    "kv_mib_at_2048_tokens": 256
+  },
+  "measured_host_vram_mib": {
+    "meshweave-host-a": 5747,
+    "meshweave-host-b": 7757,
+    "meshweave-host-c": 7757
+  },
+  "single_gpu_test": {
+    "host": "meshweave-host-a",
+    "result": "OOM at load",
+    "error": "allocating 6354.15 MiB on device 0: cudaMalloc failed: out of memory",
+    "measured": true
+  },
+  "three_node_execution": {
+    "status": "blocked",
+    "reason": "llama.cpp CUDA build still compiling on HOST-B and HOST-C (90% / 125%). rpc-server built and verified on HOST-A.",
+    "ready_to_run": "uv run python scripts/deploy_three_node.py --up"
+  }
+}
