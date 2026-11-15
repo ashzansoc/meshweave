@@ -164,7 +164,50 @@ measurements show that capacity is not needed here.
 - **Model downloaded on all three hosts** (6.31 GiB each).
 - **CUDA device detection confirmed** on HOST-A.
 
-## 6. The distributed attempt (MEASURED — did not complete)
+## 6. Distributed results (MEASURED)
+
+### Bulk throughput is far better than the Phase 2A echoes measured
+
+The Phase 2A probes used 64 KiB echoes, which are round-trip-bound. A real
+50 MB stream to HOST-B measures **11.71 Mbps** — 15× higher. TCP window scaling
+matters, and the earlier figure was pessimistic for bulk transfer.
+
+### Two-node A+C: WORKS
+
+```
+llama-cli --rpc 1.208.108.242:46092 -ngl 99 -ts 1,1
+[ Prompt: 117.9 t/s | Generation: 54.1 t/s ]
+> What is 2+2? Answer in one word.
+Four.
+```
+
+Correct output. HOST-C's RPC log confirms `Accepted client connection`, so the
+remote GPU did real work. 54.1 t/s versus 133.7 t/s on HOST-C alone — distribution
+costs about 2.5× on the fast pair, which is the expected pipeline penalty.
+
+### Two-node B+C and three-node A+B+C: HANG at load
+
+| Configuration | Weights placed | GPU util | Load completes? |
+|---|---|---|---|
+| A + C (0.5 ms) | yes | active | **yes** |
+| B + C (309 ms) | B 2,604 MiB, C 1,082 MiB | 0% | **no** |
+| A + B + C | A 3,496 / B 2,250 / C 926 MiB | 0% | **no** |
+
+The weights are placed on every GPU in all three cases. What fails is the
+protocol: the RPC log shows repeated
+
+```
+Client connection closed
+Accepted client connection
+```
+
+— a connect/drop/reconnect cycle.
+
+**Root cause: round-trip latency, not bandwidth.** At ~300 ms RTT the RPC
+connection churns and the load never finishes. Bulk bandwidth is adequate
+(11.71 Mbps); the latency breaks the protocol.
+
+## 6b. The earlier blocked attempt (superseded)
 
 All three hosts now have `ggml-rpc-server` built with CUDA. The nodes were started
 on internal port 10200, which Vast maps externally on every host:

@@ -85,5 +85,45 @@
       }
     },
     "conclusion": "The model works on 2 of 3 GPUs. HOST-C is the fastest at 133.7 tok/s generation."
+  },
+  "distributed_results": {
+    "measured": true,
+    "bulk_throughput": {
+      "note": "Large-stream TCP is 15x faster than the small-payload echo probes in Phase 2A.",
+      "a_to_b_bulk_mbps": 11.71,
+      "a_to_b_payload_mb": 50,
+      "a_to_c_sustained_mbps": 347.19
+    },
+    "two_node_a_c": {
+      "status": "WORKS",
+      "rtt_ms": 0.5,
+      "prompt_tps": 117.9,
+      "gen_tps": 54.1,
+      "output": "Four.",
+      "correct": true,
+      "evidence": "HOST-C rpc log shows Accepted client connection; correct answer produced"
+    },
+    "two_node_b_c": {
+      "status": "HANGS at model load",
+      "rtt_ms": 309,
+      "allocated": {
+        "host_b_mib": 2604,
+        "host_c_mib": 1082
+      },
+      "gpu_util_pct": 0,
+      "observation": "Weights are placed on both GPUs, then the RPC connection churns: repeated \"Client connection closed\" / \"Accepted client connection\". Load never completes."
+    },
+    "three_node_a_b_c": {
+      "status": "HANGS at model load",
+      "allocated": {
+        "host_a_mib": 3496,
+        "host_b_mib": 2250,
+        "host_c_mib": 926
+      },
+      "gpu_util_pct": 0,
+      "observation": "Same churn pattern. All three GPUs hold weight shards but the load does not finish in 13+ minutes."
+    },
+    "root_cause": "llama.cpp RPC drops and reopens its connection when the peer RTT is ~300 ms. Weight placement succeeds; the protocol does not complete. Bandwidth is adequate (11.71 Mbps bulk); latency breaks it.",
+    "conclusion": "Two-node distribution works over the fast link and produces correct output. Any RPC path involving HOST-B hangs. The obstacle is round-trip latency, not throughput."
   }
 }
