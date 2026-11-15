@@ -125,6 +125,9 @@ class CoordinatorState:
 def create_app(settings: CoordinatorSettings | None = None) -> FastAPI:
     settings = settings or CoordinatorSettings()
     state = CoordinatorState(settings)
+    # Restore the cluster we knew before this process started, so a restart does
+    # not silently drop every node.
+    state.registry.load_snapshot()
 
     app = FastAPI(
         title="MESHWEAVE Coordinator",
@@ -218,6 +221,13 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             "reliability": record.reliability_score,
             "status": record.status.value,
         }
+
+    @app.delete("/v1/nodes/{node_id}")
+    async def forget_node(node_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+        """Remove a node from the registry. Admin-only."""
+        require_admin(state, authorization)
+        removed = state.registry.forget(node_id)
+        return {"node_id": node_id, "removed": removed}
 
     @app.get("/v1/nodes")
     async def list_nodes() -> dict[str, Any]:

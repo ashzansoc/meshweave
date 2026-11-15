@@ -10,8 +10,10 @@ registry is also used from sync test code.
 
 from __future__ import annotations
 
+import json
 import threading
 from datetime import timedelta
+from pathlib import Path
 
 from meshweave.config import CoordinatorSettings
 from meshweave.core import (
@@ -35,8 +37,99 @@ class ResourceRegistry:
         self._nodes: dict[str, NodeRecord] = {}
         self._last_seen: dict[str, float] = {}
         self.degrade_reasons: dict[str, str] = {}
+        # Snapshot loading is explicit, not automatic. A test that constructs a
+        # registry must get an empty one; inheriting a previous run's cluster
+        # would make results depend on what ran before.
+        self._loaded_snapshot = False
+
+    # ------------------------------------------------------------ persistence
+
+    def _snapshot_path(self) -> Path:
+        """Snapshot location, anchored to the repo rather than the cwd.
+
+        The coordinator may be launched from any directory; a relative path would
+        silently write the snapshot somewhere unexpected and the restart would find
+        nothing.
+        """
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        return repo_root / "reports" / "registry_snapshot.json"
+
+    def load_snapshot(self) -> int:
+        """Restore the registry from disk. Returns the number of nodes restored.
+
+        Called explicitly by the coordinator at startup. Not called from the
+        constructor: a test must start empty.
+        """
+        self._loaded_snapshot = True
+        self._load_snapshot()
+        return len(self._nodes)
+
+    def _load_snapshot(self) -> None:
+        path = self._snapshot_path()
+        if not path.exists():
+            return
+        try:
+            with path.open() as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            return
+        for raw in data.get("nodes", []):
+            try:
+                record = NodeRecord.model_validate(raw)
+            except Exception:  # noqa: BLE001 - a corrupt entry must not block startup
+                continue
+            # A restored node has not been heard from in this process. Until it
+            # sends a heartbeat it is UNREACHABLE, whatever the snapshot said.
+            # Trusting the snapshot's status would present a dead cluster as live.
+            record.status = NodeStatus.UNREACHABLE
+            record.missed_heartbeats += 1
+            self._nodes[record.node_id] = record
+
+    def _save_unlocked(self) -> None:
+        payload = {
+            "saved_at": utcnow().isoformat(),
+            "nodes": [n.model_dump(mode="json") for n in self._nodes.values()],
+        }
+        path = self._snapshot_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, indent=2))
+            tmp.replace(path)
+        except OSError:
+            # A failed snapshot must never break a heartbeat.
+            pass
+
+    def save_snapshot(self) -> None:
+        """Persist the registry so a restart does not forget the cluster."""
+        with self._lock:
+            payload = {
+                "saved_at": utcnow().isoformat(),
+                "nodes": [n.model_dump(mode="json") for n in self._nodes.values()],
+            }
+        path = self._snapshot_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2))
+        tmp.replace(path)
 
     # ---------------------------------------------------------------- writes
+
+    @staticmethod
+    def _is_synthetic(record: NodeRecord) -> bool:
+        """A node is synthetic when its agent version or GPU UUID says so.
+
+        Synthetic nodes are test fixtures. They must never be presented as real
+        hardware, and they are excluded from cluster aggregates.
+        """
+        inv = record.inventory
+        if inv is not None:
+            if "synthetic" in (inv.agent_version or "").lower():
+                return True
+            for gpu in inv.gpus:
+                if gpu.uuid.startswith("synthetic-"):
+                    return True
+        return "synthetic" in (record.registration.agent_version or "").lower()
 
     def register(self, registration: NodeRegistration) -> NodeRecord:
         with self._lock:
@@ -60,7 +153,9 @@ class ResourceRegistry:
             record.last_heartbeat_at = heartbeat.sent_at
             record.missed_heartbeats = 0
             record.observations += 1
-            return record
+            result = record.model_copy(deep=True)
+            self._save_unlocked()
+        return result
 
     def mark_degraded(self, node_id: str, reason: str) -> None:
         self.degrade_reasons[node_id] = reason
@@ -80,6 +175,19 @@ class ResourceRegistry:
             record = self._nodes.get(node_id)
             if record is not None:
                 record.hourly_cost_usd = usd
+
+    def forget(self, node_id: str) -> bool:
+        """Remove a node entirely.
+
+        Used for nodes that were registered in error, or synthetic fixtures left
+        in a snapshot. Removal is explicit; nothing is dropped automatically.
+        """
+        with self._lock:
+            existed = self._nodes.pop(node_id, None) is not None
+            self.degrade_reasons.pop(node_id, None)
+            if existed:
+                self._save_unlocked()
+            return existed
 
     def retire(self, node_id: str) -> None:
         with self._lock:
@@ -102,8 +210,14 @@ class ResourceRegistry:
             return [n for n in self._nodes.values() if n.status == NodeStatus.HEALTHY]
 
     def available(self) -> list[NodeRecord]:
-        """Nodes that can accept work right now."""
-        return [n for n in self.healthy() if n.gpus]
+        """Real nodes that can accept work right now.
+
+        Synthetic nodes are excluded: a test fixture must never be counted as
+        cluster capacity.
+        """
+        return [
+            n for n in self.healthy() if n.gpus and not self._is_synthetic(n)
+        ]
 
     def with_free_vram(self, required_bytes: int) -> list[NodeRecord]:
         return [n for n in self.available() if n.vram_free_bytes >= required_bytes]
