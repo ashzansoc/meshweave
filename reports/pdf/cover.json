@@ -1,0 +1,10 @@
+{
+  "kicker": "PROOF OF CONCEPT / NOVEMBER 2026",
+  "hero": "MESHWEAVE",
+  "summary": "Three independently rented GPUs on separate cloud hosts, coordinating to execute one language model. What was built, what was measured, and what the measurements disproved.",
+  "meta": "3 hosts  ·  22 GB VRAM  ·  Phases 0-4.1",
+  "footer_left": "Many Machines. One Intelligence.",
+  "footer_right": "Technical Report",
+  "year": "2026",
+  "word": "POC"
+}
