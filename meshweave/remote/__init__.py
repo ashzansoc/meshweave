@@ -13,6 +13,13 @@ from meshweave.remote.hosts import (
     by_id,
     shared_ip_groups,
 )
+from meshweave.remote.process_registry import (
+    REGISTRY,
+    OwnedProcess,
+    ProcessRegistry,
+    UnsafeTerminationError,
+    terminate_experiment,
+)
 from meshweave.remote.ssh import (
     Host,
     RemoteError,
@@ -30,6 +37,10 @@ __all__ = [
     "HOST_A",
     "HOST_B",
     "HOST_C",
+    "OwnedProcess",
+    "ProcessRegistry",
+    "REGISTRY",
+    "UnsafeTerminationError",
     "NETWORK_DIR",
     "RAW_DIR",
     "Host",
@@ -42,4 +53,5 @@ __all__ = [
     "run",
     "run_many",
     "shared_ip_groups",
+    "terminate_experiment",
 ]
