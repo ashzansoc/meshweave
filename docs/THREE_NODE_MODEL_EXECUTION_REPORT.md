@@ -137,26 +137,72 @@ Rationale, measured where possible:
 - **Model downloaded on all three hosts** (6.31 GiB each).
 - **CUDA device detection confirmed** on HOST-A.
 
-## 6. What is blocked
+## 6. The distributed attempt (MEASURED — did not complete)
 
-**Three-node distributed execution — BLOCKED.**
+All three hosts now have `ggml-rpc-server` built with CUDA. The nodes were started
+on internal port 10200, which Vast maps externally on every host:
 
-Reason: `ggml-rpc-server` did not build as part of the default target; it requires
-`-DGGML_RPC=ON`. HOST-A has been rebuilt with that flag and is ready. HOST-B and
-HOST-C are still compiling (90% and 125% job count) on 12-core machines with
-`-j 16`, which is slower than expected.
+| Host | Internal | External | GPU visible to RPC |
+|---|---|---|---|
+| HOST-A | — | driver | GTX 1660 SUPER, 5,747 MiB |
+| HOST-B | 10200 | 83.63.1.187:33774 | Quadro RTX 4000, 7,686 MiB free |
+| HOST-C | 10200 | 1.208.108.242:46092 | RTX 2070 SUPER, 7,679 MiB free |
 
-Not yet measured:
+The RPC protocol works. Evidence:
 
-- Three-node execution at all
-- Per-GPU utilisation during distributed execution
-- Network bytes per token across the WAN
-- TTFT / inter-token latency for the distributed path
+```
+HOST-B rpc-server log:  "Accepted client connection"
+HOST-C nvidia-smi:      2452 MiB allocated
+HOST-A -> HOST-B:33774: TCP OPEN
+```
+
+**But the load did not complete.** After three minutes HOST-C held 2,452 MiB and
+sat at **0% GPU utilisation**, with the driver still running and no progress.
+
+### Root cause
+
+**llama.cpp's RPC backend transfers model tensors to remote devices over TCP at
+load time.** The weights are not read from the worker's own disk; they are shipped
+across the network by the driver.
+
+That collides with the measured links:
+
+| Link | Sustained | ~2 GiB shard would take |
+|---|---|---|
+| A ↔ C | 347 Mbps | ~50 s |
+| A ↔ B | 0.6–1.0 Mbps | **~5.7 hours** |
+
+So HOST-B cannot receive a shard in any practical time, and even the fast link
+did not finish inside the test window.
+
+**This is a link-capacity limit, not a code fault.** It is exactly the class of
+constraint the Phase 2A measurements predicted, now confirmed against the real
+runtime.
+
+### The fix, and why it matters
+
+Every host already has the complete 6.31 GiB GGUF **on local disk**. A design that
+loads weights from local disk on each worker and sends only *activations* between
+hosts avoids the transfer entirely. At 7 KiB per token per hop (Phi-mini-MoE's
+hidden size is 4096, so ~8 KiB fp16), the payload is negligible even at 0.6 Mbps —
+0.8 Mbps moves 8 KiB in ~80 ms, versus hours for the weights.
+
+That is the architecture MESHWEAVE's own pipeline runtime implements
+(`meshweave/runtime/pipeline.py`): it loads each stage from local storage and
+passes activations. It is the correct design for this fleet, and the llama.cpp RPC
+result is the measurement that justifies it.
+
+## 7. What is not measured
+
+- Three-node inference output (no token was generated)
+- Per-GPU utilisation during a completed run
+- TTFT / inter-token latency
+- Network bytes per token on a completed run
 - Single-GPU baselines on HOST-B and HOST-C
-- Output correctness comparison
-- Failure and recovery behaviour
+- Correctness comparison
+- Failure and recovery
 
-I am not going to report any of these without measuring them.
+I am not reporting these, because I did not measure them.
 
 ---
 

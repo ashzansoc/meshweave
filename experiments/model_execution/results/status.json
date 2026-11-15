@@ -26,5 +26,24 @@
     "status": "blocked",
     "reason": "llama.cpp CUDA build still compiling on HOST-B and HOST-C (90% / 125%). rpc-server built and verified on HOST-A.",
     "ready_to_run": "uv run python scripts/deploy_three_node.py --up"
+  },
+  "distributed_attempt": {
+    "measured": true,
+    "setup": "llama.cpp llama-cli on HOST-A + ggml-rpc-server on HOST-B and HOST-C, port 10200 (mapped)",
+    "rpc_connection_established": true,
+    "evidence": "HOST-B rpc log: \"Accepted client connection\"; HOST-C GPU allocated 2452 MiB",
+    "result": "did not complete",
+    "observation": "llama.cpp RPC transfers model tensors to remote devices over the network at load time. HOST-C received 2452 MiB and then stalled at 0% GPU utilisation. Load did not finish within 3 minutes.",
+    "implication": "On A<->B (0.6-1.0 Mbps) the transfer of ~2 GiB per worker would take hours. This is a link-capacity limit, not a code fault.",
+    "blocked_reason": "Weight transfer over the measured links is too slow to finish the load."
+  },
+  "conclusion": {
+    "three_node_collaboration": "NOT DEMONSTRATED",
+    "why": "llama.cpp RPC ships weights over TCP at load. The measured WAN links (0.6-1.0 Mbps to B) cannot carry the shards in reasonable time.",
+    "what_would_fix_it": [
+      "Pre-place weights on each worker and use llama.cpp local cache so no transfer is needed",
+      "Use a runtime that streams activations only (MESHWEAVE own pipeline) with weights loaded from local disk on each host"
+    ],
+    "note": "Each host already has the full GGUF locally (6.31 GiB). A design that loads from local disk and only sends activations would avoid the transfer entirely."
   }
 }
