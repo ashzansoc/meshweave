@@ -1,0 +1,23 @@
+{
+  "phase": "3D.2",
+  "raw_tcp_ab": {
+    "note": "A->B echo round trip, persistent connection, TCP_NODELAY, 10 samples each",
+    "8KiB":  {"min":314.1,"p50":353.8,"max":2989.2,"rtt_multiple":1.0},
+    "32KiB": {"min":980.5,"p50":1314.0,"max":2688.9,"rtt_multiple":4.0},
+    "128KiB":{"min":943.2,"p50":2768.5,"max":6940.7,"rtt_multiple":8.5},
+    "1MiB":  {"min":3146.8,"p50":5674.8,"max":16432.1,"rtt_multiple":17.5},
+    "finding": "8 KiB is exactly one RTT. Above ~8 KiB the link is window-limited: 32 KiB costs 4 RTTs. This explains the prefill cost, not the decode cost."
+  },
+  "decode_progression": {
+    "relay":            {"prefill_ms":22017.7,"decode_ms":[3399.0,2047.8,2432.9,2773.7],"mean":2663.3},
+    "relay_rerun":      {"prefill_ms":26166.3,"decode_ms":[2709.9,1989.7,1987.2,1999.0],"mean":2171.4},
+    "direct_with_ack":  {"prefill_ms":6002.7,"decode_ms":[1027.1,1354.3,1175.7,1545.4],"mean":1275.6},
+    "direct_fireforget":{"prefill_ms":2748.8,"decode_ms":[460.5,449.4,446.7,454.9],"mean":452.9}
+  },
+  "total_improvement": {"decode":5.88,"prefill":8.01,"from_ms":2663.3,"to_ms":452.9},
+  "correctness": {"token_sequence_all_modes":[29871,13,32001,7803,29889],"identical":true},
+  "root_cause_of_remaining_latency": "The direct-return path still sent a 'done' acknowledgement back up the chain (C->B->A, ~620 ms) and stage A blocked on it. Under direct return that ack carries no information the client needs: the client is waiting on the reply channel. Making forwarding fire-and-forget removed it.",
+  "physical_floor": {"one_way_a_to_b_ms":155,"one_way_b_to_c_ms":155,"compute_ms":65,"total_ms":375,"observed_ms":452.9,"ratio":1.2},
+  "delayed_ack": {"status":"not the cause","evidence":"8 KiB round trip measured at 353.8 ms against a 311 ms RTT = 1.14x, i.e. one round trip. A delayed-ACK penalty would show 1.5-2x."},
+  "sample_size": {"decode_steps_per_mode":4,"required_by_brief":30,"honest_note":"below target"}
+}

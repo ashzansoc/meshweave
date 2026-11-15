@@ -237,6 +237,25 @@ class StageWorker:
             fwd_header["reply_to"] = header["reply_to"]
         send_started = time.monotonic()
         send_frame(self.downstream, fwd_header, out.to(torch.float16).cpu().numpy().tobytes())
+
+        if header.get("reply_to"):
+            # Direct return: the client is waiting on the reply channel, which the
+            # last stage writes to. Waiting here for a downstream acknowledgement
+            # would add a full C->B->A round trip (~620 ms) to every token for no
+            # information the caller needs.
+            send_ms = (time.monotonic() - send_started) * 1000
+            return (
+                {
+                    "op": "forwarded",
+                    "req": header["req"],
+                    "stage": self.index,
+                    "route": "direct",
+                    "compute_ms": round(compute_ms, 2),
+                    "forward_ms": round(send_ms, 2),
+                },
+                b"",
+            )
+
         downstream_header, downstream_payload = recv_frame(self.downstream)
         send_ms = (time.monotonic() - send_started) * 1000
 
