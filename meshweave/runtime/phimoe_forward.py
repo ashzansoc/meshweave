@@ -324,20 +324,29 @@ class StageExecutor:
         if router_choices is not None:
             router_choices[index] = topk_idx.detach()
 
-        out = torch.zeros_like(flat)
-        for slot in range(TOP_K):
-            expert_ids = topk_idx[:, slot]  # [tokens]
-            weight = topk_probs[:, slot].unsqueeze(-1)  # [tokens,1]
-            for expert in torch.unique(expert_ids).tolist():
-                mask = expert_ids == expert
-                if not bool(mask.any()):
-                    continue
-                selected = flat[mask]
-                gate = selected @ w["w_gate"][expert]
-                up = selected @ w["w_up"][expert]
-                activated = torch.nn.functional.silu(gate) * up
-                down = activated @ w["w_down"][expert]
-                out[mask] += down * weight[mask]
+        # Compute ALL experts densely instead of gathering per selected expert.
+        #
+        # The previous version called torch.unique(...).tolist() and bool(mask.any())
+        # once per top-k slot per layer. Each of those forces a GPU->CPU
+        # synchronisation, so a decode step paid ~64 syncs across 32 layers. On the
+        # 2070 SUPER that alone accounted for most of the 30 ms/token measured
+        # against llama.cpp's 7.5 ms for the whole model.
+        #
+        # Dense over 16 experts costs 16x the FLOPs on a 960-wide FFN, which is
+        # trivial next to the repeated synchronisation it removes.
+        gate = torch.einsum("th,eho->teo", flat, w["w_gate"])   # [tokens, experts, ffn]
+        up = torch.einsum("th,eho->teo", flat, w["w_up"])
+        activated = torch.nn.functional.silu(gate) * up
+        down = torch.einsum("tef,efh->teh", activated, w["w_down"])  # [tokens, experts, hidden]
+
+        # Weight by the routing probability of each selected expert and sum.
+        weights = torch.zeros_like(down)  # [tokens, experts, hidden]
+        weights.scatter_(
+            1,
+            topk_idx.unsqueeze(-1).expand(-1, -1, hidden),
+            topk_probs.to(down.dtype).unsqueeze(-1).expand(-1, -1, hidden),
+        )
+        out = (down * weights).sum(dim=1)
 
         return out.reshape(batch, seq, hidden)
 
