@@ -1,0 +1,54 @@
+{
+  "endpoints": {
+    "meshweave-host-a": [
+      "1.208.108.242",
+      51452
+    ],
+    "meshweave-host-b": [
+      "83.63.1.187",
+      32892
+    ],
+    "meshweave-host-c": [
+      "1.208.108.242",
+      46024
+    ]
+  },
+  "results": [
+    {
+      "ok": false,
+      "error": "meshweave-host-a (root@1.208.108.242:51400): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 51400: Connection refused",
+      "source": "meshweave-host-a",
+      "target": "meshweave-host-b"
+    },
+    {
+      "ok": false,
+      "error": "meshweave-host-a (root@1.208.108.242:51400): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 51400: Connection refused",
+      "source": "meshweave-host-a",
+      "target": "meshweave-host-c"
+    },
+    {
+      "ok": false,
+      "error": "meshweave-host-b (root@83.63.1.187:24014): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 83.63.1.187 port 24014: Connection refused",
+      "source": "meshweave-host-b",
+      "target": "meshweave-host-a"
+    },
+    {
+      "ok": false,
+      "error": "meshweave-host-b (root@83.63.1.187:24014): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 83.63.1.187 port 24014: Connection refused",
+      "source": "meshweave-host-b",
+      "target": "meshweave-host-c"
+    },
+    {
+      "ok": false,
+      "error": "meshweave-host-c (root@1.208.108.242:46079): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 46079: Connection refused",
+      "source": "meshweave-host-c",
+      "target": "meshweave-host-a"
+    },
+    {
+      "ok": false,
+      "error": "meshweave-host-c (root@1.208.108.242:46079): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo CmltcG9ydCBzb2NrZXQsIHRpbWUsIGpzb24KcmVzdWx0ID0geyJvayI6IEZhbHNlfQp0cnk6CiAgICB0MCA9IHRpbWUubW9ub3RvbmljKCkKICAgIHM\n  stderr: ssh: connect to host 1.208.108.242 port 46079: Connection refused",
+      "source": "meshweave-host-c",
+      "target": "meshweave-host-b"
+    }
+  ]
+}

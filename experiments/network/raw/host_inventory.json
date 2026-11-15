@@ -11,14 +11,182 @@
       "gpu_name": "NVIDIA GeForce GTX 1660 SUPER",
       "vram_gib": 6.0
     },
-    "collected_at": null,
-    "commands": {},
+    "collected_at": "2026-11-15T11:02:33.463491+00:00",
+    "commands": {
+      "gpu_nvidia_smi": {
+        "exit_code": 0,
+        "stdout": "NVIDIA GeForce GTX 1660 SUPER, GPU-b921eed5-4c45-3b82-e679-753715639003, 580.159.03, 6144 MiB, 5747 MiB, 30, 10.96 W\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.919
+      },
+      "gpu_uuid_short": {
+        "exit_code": 0,
+        "stdout": "GPU-b921eed5-4c45-3b82-e679-753715639003\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.749
+      },
+      "cuda_nvcc": {
+        "exit_code": 0,
+        "stdout": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.565
+      },
+      "cuda_driver_api": {
+        "exit_code": 0,
+        "stdout": "580.159.03\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.792
+      },
+      "os_uname": {
+        "exit_code": 0,
+        "stdout": "Linux 70d0b1aea811 5.15.0-186-generic #196-Ubuntu SMP Sat Jun 20 16:09:34 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.991
+      },
+      "os_release": {
+        "exit_code": 0,
+        "stdout": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.736
+      },
+      "kernel": {
+        "exit_code": 0,
+        "stdout": "5.15.0-186-generic\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.511
+      },
+      "python": {
+        "exit_code": 0,
+        "stdout": "Python 3.12.3\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 4.061
+      },
+      "cpu_model": {
+        "exit_code": 0,
+        "stdout": "Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.674
+      },
+      "cpu_cores": {
+        "exit_code": 0,
+        "stdout": "40\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.444
+      },
+      "ram": {
+        "exit_code": 0,
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:            62Gi       3.5Gi        36Gi       2.7Mi        23Gi        59Gi\nSwap:          8.0Gi        14Mi       8.0Gi\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.595
+      },
+      "disk": {
+        "exit_code": 0,
+        "stdout": "Filesystem      Size  Used Avail Use% Mounted on\noverlay          16G  187M   16G   2% /\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.713
+      },
+      "interfaces": {
+        "exit_code": 0,
+        "stdout": "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n1: lo    inet6 ::1/128 scope host \\       valid_lft forever preferred_lft forever\n2: eth0    inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0\\       valid_lft forever preferred_lft forever\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.975
+      },
+      "routes": {
+        "exit_code": 0,
+        "stdout": "default via 172.17.0.1 dev eth0 \n172.17.0.0/16 dev eth0 proto kernel scope link src 172.17.0.2 \n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.433
+      },
+      "link_stats": {
+        "exit_code": 0,
+        "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    RX:  bytes packets errors dropped  missed   mcast           \n        165280     209      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n        165280     209      0       0       0       0 \n2: eth0@if19403: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default \n    link/ether c6:9c:96:3b:e3:0d brd ff:ff:ff:ff:ff:ff link-netnsid 0\n    RX:  bytes packets errors dropped  missed   mcast           \n      30570273   22220      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n       1209964   12813      0       0       0       0 \n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.754
+      },
+      "listening": {
+        "exit_code": 0,
+        "stdout": "Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                   \nudp   UNCONN 0      0            0.0.0.0:52949      0.0.0.0:*                                             \nudp   UNCONN 0      0            0.0.0.0:21027      0.0.0.0:*                                             \nudp   UNCONN 0      0               [::]:21027         [::]:*                                             \ntcp   LISTEN 0      128        127.0.0.1:16006      0.0.0.0:*    users:((\"tensorboard\",pid=1433,fd=10))   \ntcp   LISTEN 0      2048       127.0.0.1:11112      0.0.0.0:*    users:((\"fastapi\",pid=1438,fd=12))       \ntcp   LISTEN 0      2048       127.0.0.1:11111      0.0.0.0:*    users:((\"fastapi\",pid=1430,fd=13))       \ntcp   LISTEN 0      128          0.0.0.0:8080       0.0.0.0:*    users:((\"jupyter-noteboo\",pid=1173,fd=6))\ntcp   LISTEN 0      4096       127.0.0.1:20243      0.0.0.0:*    users:((\"cloudflared\",pid=1793,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20242      0.0.0.0:*    users:((\"cloudflared\",pid=1781,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20241      0.0.0.0:*    users:((\"cloudflared\",pid=1714,fd=13))   \ntcp   LISTEN 0      4096       127.0.0.1:20244      0.0.0.0:*    users:((\"cloudflared\",pid=1805,fd=12))   \ntcp   LISTEN 0      128          0.0.0.0:22         0.0.0.0:*    users:((\"sshd\",pid=1031,fd=4))           \ntcp   LISTEN 0      4096       127.0.0.1:18384      0.0.0.0:*                                             \ntcp   LISTEN 0      4096               *:51449            *:*                                             \ntcp   LISTEN 0      4096               *:6006             *:*    users:((\"caddy\",pid=1746,fd=8))          \ntcp   LISTEN 0      4096               *:1111             *:*    users:((\"caddy\",pid=1746,fd=7))          \ntcp   LISTEN 0      128             [::]:22            [::]:*    users:((\"sshd\",pid=1031,fd=5))           \ntcp   LISTEN 0      1024           [::1]:39775         [::]:*    users:((\"server\",pid=1531,fd=6))         \ntcp   LISTEN 0      4096               *:8384             *:*    users:((\"caddy\",pid=1746,fd=4))          \n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.471
+      },
+      "pci_gpus": {
+        "exit_code": 0,
+        "stdout": "lspci unavailable\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.843
+      },
+      "dmi_product": {
+        "exit_code": 0,
+        "stdout": "\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 4.1
+      },
+      "dmi_uuid": {
+        "exit_code": 0,
+        "stdout": "03000200-0400-0500-0006-000700080009\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.427
+      },
+      "dmi_board_serial": {
+        "exit_code": 0,
+        "stdout": "MB-202509082025\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.833
+      },
+      "machine_id": {
+        "exit_code": 0,
+        "stdout": "5c7135094dfb4344b596c52aeca6aea7\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 4.005
+      },
+      "boot_id": {
+        "exit_code": 0,
+        "stdout": "015873dd-0dfb-4c71-8efb-c6f6d337dedc\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.678
+      },
+      "virt": {
+        "exit_code": 0,
+        "stdout": "docker\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 4.932
+      },
+      "tun_device": {
+        "exit_code": 0,
+        "stdout": "absent\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.984
+      },
+      "vast_env": {
+        "exit_code": 0,
+        "stdout": "PUBLIC_IPADDR=1.208.108.242\nVAST_TCP_PORT_10100=51452\nVAST_TCP_PORT_10200=51440\nVAST_TCP_PORT_1111=51442\nVAST_TCP_PORT_22=51400\nVAST_TCP_PORT_6006=51468\nVAST_TCP_PORT_72299=51449\nVAST_TCP_PORT_8080=51443\nVAST_TCP_PORT_8384=51416\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:51400' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.724
+      }
+    },
     "failed_commands": [],
-    "verified_gpus": [],
-    "verification": {},
-    "auth_ok": false,
-    "auth_detail": "meshweave-host-a (root@1.208.108.242:51400): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo __AUTH_OK__\n  stderr: root@1.208.108.242: Permission denied (publickey).",
-    "error": "authentication failed"
+    "verified_gpus": [
+      {
+        "name": "NVIDIA GeForce GTX 1660 SUPER",
+        "uuid": "GPU-b921eed5-4c45-3b82-e679-753715639003",
+        "driver_version": "580.159.03",
+        "memory_total": "6144 MiB",
+        "memory_free": "5747 MiB",
+        "temperature_c": "30",
+        "power_draw_w": "10.96 W"
+      }
+    ],
+    "verification": {
+      "claimed_gpu": "NVIDIA GeForce GTX 1660 SUPER",
+      "claimed_vram_gib": 6.0,
+      "reported_gpus": [
+        "NVIDIA GeForce GTX 1660 SUPER"
+      ],
+      "mismatches": [],
+      "matches_claim": true
+    },
+    "auth_ok": true,
+    "auth_detail": "authenticated"
   },
   {
     "node_id": "meshweave-host-b",
@@ -32,14 +200,184 @@
       "gpu_name": "NVIDIA RTX 4000",
       "vram_gib": 8.0
     },
-    "collected_at": null,
-    "commands": {},
+    "collected_at": "2026-11-15T11:02:33.090961+00:00",
+    "commands": {
+      "gpu_nvidia_smi": {
+        "exit_code": 0,
+        "stdout": "Quadro RTX 4000, GPU-ce05c91f-8b1e-f63b-552f-864ae6eddec9, 595.99.02, 8192 MiB, 7786 MiB, 38, 0.58 W\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.155
+      },
+      "gpu_uuid_short": {
+        "exit_code": 0,
+        "stdout": "GPU-ce05c91f-8b1e-f63b-552f-864ae6eddec9\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.501
+      },
+      "cuda_nvcc": {
+        "exit_code": 0,
+        "stdout": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Fri_May_08_10:53:34_AM_PDT_2026\nCuda compilation tools, release 13.2, V13.2.86\nBuild cuda_13.2.r13.2/compiler.37953736_0\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.441
+      },
+      "cuda_driver_api": {
+        "exit_code": 0,
+        "stdout": "595.99.02\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.287
+      },
+      "os_uname": {
+        "exit_code": 0,
+        "stdout": "Linux 2d6e3ce8541f 7.0.0-42-generic #42~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Mon Oct 19 14:43:01 UTC 2 x86_64 x86_64 x86_64 GNU/Linux\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.713
+      },
+      "os_release": {
+        "exit_code": 0,
+        "stdout": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.313
+      },
+      "kernel": {
+        "exit_code": 0,
+        "stdout": "7.0.0-42-generic\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.251
+      },
+      "python": {
+        "exit_code": 0,
+        "stdout": "Python 3.12.3\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.365
+      },
+      "cpu_model": {
+        "exit_code": 0,
+        "stdout": "Intel(R) Xeon(R) W-2123 CPU @ 3.60GHz\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.507
+      },
+      "cpu_cores": {
+        "exit_code": 0,
+        "stdout": "8\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.481
+      },
+      "ram": {
+        "exit_code": 0,
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:            15Gi       6.5Gi       942Mi        14Mi       8.2Gi       8.9Gi\nSwap:          4.0Gi       128Mi       3.9Gi\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.497
+      },
+      "disk": {
+        "exit_code": 0,
+        "stdout": "Filesystem      Size  Used Avail Use% Mounted on\noverlay          16G  107M   16G   1% /\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.454
+      },
+      "interfaces": {
+        "exit_code": 0,
+        "stdout": "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n1: lo    inet6 ::1/128 scope host \\       valid_lft forever preferred_lft forever\n2: eth0    inet 172.17.0.3/16 brd 172.17.255.255 scope global eth0\\       valid_lft forever preferred_lft forever\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.768
+      },
+      "routes": {
+        "exit_code": 0,
+        "stdout": "default via 172.17.0.1 dev eth0 \n172.17.0.0/16 dev eth0 proto kernel scope link src 172.17.0.3 \n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.036
+      },
+      "link_stats": {
+        "exit_code": 0,
+        "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    RX:  bytes packets errors dropped  missed   mcast           \n         97091     156      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n         97091     156      0       0       0       0 \n2: eth0@if1706: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default \n    link/ether c2:64:78:10:a6:75 brd ff:ff:ff:ff:ff:ff link-netnsid 0\n    RX:  bytes packets errors dropped  missed   mcast           \n       1190834    4082      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n        488478    3248      0       0       0       0 \n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.066
+      },
+      "listening": {
+        "exit_code": 0,
+        "stdout": "Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                  \nudp   UNCONN 0      0            0.0.0.0:59023      0.0.0.0:*                                            \nudp   UNCONN 0      0            0.0.0.0:21027      0.0.0.0:*                                            \nudp   UNCONN 0      0               [::]:49647         [::]:*                                            \nudp   UNCONN 0      0               [::]:21027         [::]:*                                            \ntcp   LISTEN 0      128        127.0.0.1:16006      0.0.0.0:*    users:((\"tensorboard\",pid=706,fd=10))   \ntcp   LISTEN 0      128          0.0.0.0:22         0.0.0.0:*    users:((\"sshd\",pid=324,fd=4))           \ntcp   LISTEN 0      2048       127.0.0.1:11111      0.0.0.0:*    users:((\"fastapi\",pid=708,fd=13))       \ntcp   LISTEN 0      2048       127.0.0.1:11112      0.0.0.0:*    users:((\"fastapi\",pid=707,fd=12))       \ntcp   LISTEN 0      4096       127.0.0.1:20244      0.0.0.0:*    users:((\"cloudflared\",pid=915,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20242      0.0.0.0:*    users:((\"cloudflared\",pid=886,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20243      0.0.0.0:*    users:((\"cloudflared\",pid=907,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20241      0.0.0.0:*    users:((\"cloudflared\",pid=833,fd=13))   \ntcp   LISTEN 0      128          0.0.0.0:8080       0.0.0.0:*    users:((\"jupyter-noteboo\",pid=432,fd=6))\ntcp   LISTEN 0      4096       127.0.0.1:18384      0.0.0.0:*                                            \ntcp   LISTEN 0      4096               *:26034            *:*                                            \ntcp   LISTEN 0      4096               *:1111             *:*    users:((\"caddy\",pid=855,fd=4))          \ntcp   LISTEN 0      4096               *:8384             *:*    users:((\"caddy\",pid=855,fd=8))          \ntcp   LISTEN 0      128             [::]:22            [::]:*    users:((\"sshd\",pid=324,fd=5))           \ntcp   LISTEN 0      4096               *:6006             *:*    users:((\"caddy\",pid=855,fd=7))          \ntcp   LISTEN 0      1024           [::1]:33801         [::]:*    users:((\"server\",pid=762,fd=6))         \n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.102
+      },
+      "pci_gpus": {
+        "exit_code": 0,
+        "stdout": "lspci unavailable\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.506
+      },
+      "dmi_product": {
+        "exit_code": 0,
+        "stdout": "HP Z4 G4 Workstation\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.976
+      },
+      "dmi_uuid": {
+        "exit_code": 0,
+        "stdout": "8a5a780b-8557-10ea-f347-e4c9fdd03773\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.231
+      },
+      "dmi_board_serial": {
+        "exit_code": 0,
+        "stdout": "PFPPQ0MCYEM4JM\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.503
+      },
+      "machine_id": {
+        "exit_code": 0,
+        "stdout": "af1702919cc34995bf2440bc4381dbcf\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.119
+      },
+      "boot_id": {
+        "exit_code": 0,
+        "stdout": "16c447a2-7ff6-4e88-9c86-72ed49c998f1\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.582
+      },
+      "virt": {
+        "exit_code": 0,
+        "stdout": "docker\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.192
+      },
+      "tun_device": {
+        "exit_code": 0,
+        "stdout": "absent\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.235
+      },
+      "vast_env": {
+        "exit_code": 0,
+        "stdout": "PUBLIC_IPADDR=83.63.1.187\nVAST_TCP_PORT_10100=32892\nVAST_TCP_PORT_10200=33774\nVAST_TCP_PORT_1111=37677\nVAST_TCP_PORT_22=24014\nVAST_TCP_PORT_6006=20250\nVAST_TCP_PORT_72299=26034\nVAST_TCP_PORT_8080=26799\nVAST_TCP_PORT_8384=27289\n",
+        "stderr": "Warning: Permanently added '[83.63.1.187]:24014' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 2.235
+      }
+    },
     "failed_commands": [],
-    "verified_gpus": [],
-    "verification": {},
-    "auth_ok": false,
-    "auth_detail": "meshweave-host-b (root@83.63.1.187:24014): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo __AUTH_OK__\n  stderr: root@83.63.1.187: Permission denied (publickey).",
-    "error": "authentication failed"
+    "verified_gpus": [
+      {
+        "name": "Quadro RTX 4000",
+        "uuid": "GPU-ce05c91f-8b1e-f63b-552f-864ae6eddec9",
+        "driver_version": "595.99.02",
+        "memory_total": "8192 MiB",
+        "memory_free": "7786 MiB",
+        "temperature_c": "38",
+        "power_draw_w": "0.58 W"
+      }
+    ],
+    "verification": {
+      "claimed_gpu": "NVIDIA RTX 4000",
+      "claimed_vram_gib": 8.0,
+      "reported_gpus": [
+        "Quadro RTX 4000"
+      ],
+      "mismatches": [
+        "gpu name: listing says 'nvidia rtx 4000', nvidia-smi reports 'quadro rtx 4000'"
+      ],
+      "matches_claim": false
+    },
+    "auth_ok": true,
+    "auth_detail": "authenticated"
   },
   {
     "node_id": "meshweave-host-c",
@@ -53,13 +391,181 @@
       "gpu_name": "NVIDIA GeForce RTX 2070 SUPER",
       "vram_gib": 8.0
     },
-    "collected_at": null,
-    "commands": {},
+    "collected_at": "2026-11-15T11:02:33.467828+00:00",
+    "commands": {
+      "gpu_nvidia_smi": {
+        "exit_code": 0,
+        "stdout": "NVIDIA GeForce RTX 2070 SUPER, GPU-8490e6e2-05c2-df76-9896-63a9102fc98e, 580.178.04, 8192 MiB, 7785 MiB, 28, 4.16 W\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.886
+      },
+      "gpu_uuid_short": {
+        "exit_code": 0,
+        "stdout": "GPU-8490e6e2-05c2-df76-9896-63a9102fc98e\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.762
+      },
+      "cuda_nvcc": {
+        "exit_code": 0,
+        "stdout": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.806
+      },
+      "cuda_driver_api": {
+        "exit_code": 0,
+        "stdout": "580.178.04\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.544
+      },
+      "os_uname": {
+        "exit_code": 0,
+        "stdout": "Linux 5c00204b15f7 6.8.0-147-generic #147-Ubuntu SMP PREEMPT_DYNAMIC Thu Sep 24 11:33:16 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.89
+      },
+      "os_release": {
+        "exit_code": 0,
+        "stdout": "PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.5 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.694
+      },
+      "kernel": {
+        "exit_code": 0,
+        "stdout": "6.8.0-147-generic\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.55
+      },
+      "python": {
+        "exit_code": 0,
+        "stdout": "Python 3.12.3\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.736
+      },
+      "cpu_model": {
+        "exit_code": 0,
+        "stdout": "Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.655
+      },
+      "cpu_cores": {
+        "exit_code": 0,
+        "stdout": "12\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.59
+      },
+      "ram": {
+        "exit_code": 0,
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:            31Gi       2.3Gi        13Gi       2.5Mi        16Gi        28Gi\nSwap:          8.0Gi       2.0Mi       8.0Gi\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.925
+      },
+      "disk": {
+        "exit_code": 0,
+        "stdout": "Filesystem      Size  Used Avail Use% Mounted on\noverlay          16G  107M   16G   1% /\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.7
+      },
+      "interfaces": {
+        "exit_code": 0,
+        "stdout": "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n1: lo    inet6 ::1/128 scope host \\       valid_lft forever preferred_lft forever\n2: eth0    inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0\\       valid_lft forever preferred_lft forever\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.99
+      },
+      "routes": {
+        "exit_code": 0,
+        "stdout": "default via 172.17.0.1 dev eth0 \n172.17.0.0/16 dev eth0 proto kernel scope link src 172.17.0.2 \n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.594
+      },
+      "link_stats": {
+        "exit_code": 0,
+        "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    RX:  bytes packets errors dropped  missed   mcast           \n         96020     139      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n         96020     139      0       0       0       0 \n2: eth0@if27729: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default \n    link/ether 16:53:ae:46:2f:0b brd ff:ff:ff:ff:ff:ff link-netnsid 0\n    RX:  bytes packets errors dropped  missed   mcast           \n       1180153    4026      0       0       0       0 \n    TX:  bytes packets errors dropped carrier collsns           \n        484759    3222      0       0       0       0 \n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.913
+      },
+      "listening": {
+        "exit_code": 0,
+        "stdout": "Netid State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess                                  \nudp   UNCONN 0      0            0.0.0.0:21027      0.0.0.0:*                                            \nudp   UNCONN 0      0            0.0.0.0:37674      0.0.0.0:*                                            \nudp   UNCONN 0      0               [::]:21027         [::]:*                                            \nudp   UNCONN 0      0               [::]:40633         [::]:*                                            \ntcp   LISTEN 0      2048       127.0.0.1:11112      0.0.0.0:*    users:((\"fastapi\",pid=699,fd=12))       \ntcp   LISTEN 0      2048       127.0.0.1:11111      0.0.0.0:*    users:((\"fastapi\",pid=695,fd=13))       \ntcp   LISTEN 0      128        127.0.0.1:16006      0.0.0.0:*    users:((\"tensorboard\",pid=707,fd=10))   \ntcp   LISTEN 0      4096       127.0.0.1:20244      0.0.0.0:*    users:((\"cloudflared\",pid=911,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20242      0.0.0.0:*    users:((\"cloudflared\",pid=896,fd=11))   \ntcp   LISTEN 0      4096       127.0.0.1:20243      0.0.0.0:*    users:((\"cloudflared\",pid=904,fd=12))   \ntcp   LISTEN 0      4096       127.0.0.1:20241      0.0.0.0:*    users:((\"cloudflared\",pid=821,fd=11))   \ntcp   LISTEN 0      128          0.0.0.0:22         0.0.0.0:*    users:((\"sshd\",pid=316,fd=4))           \ntcp   LISTEN 0      4096       127.0.0.1:18384      0.0.0.0:*                                            \ntcp   LISTEN 0      128          0.0.0.0:8080       0.0.0.0:*    users:((\"jupyter-noteboo\",pid=433,fd=6))\ntcp   LISTEN 0      4096               *:8384             *:*    users:((\"caddy\",pid=866,fd=8))          \ntcp   LISTEN 0      1024           [::1]:45413         [::]:*    users:((\"server\",pid=757,fd=6))         \ntcp   LISTEN 0      4096               *:46094            *:*                                            \ntcp   LISTEN 0      128             [::]:22            [::]:*    users:((\"sshd\",pid=316,fd=5))           \ntcp   LISTEN 0      4096               *:1111             *:*    users:((\"caddy\",pid=866,fd=4))          \ntcp   LISTEN 0      4096               *:6006             *:*    users:((\"caddy\",pid=866,fd=7))          \n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.67
+      },
+      "pci_gpus": {
+        "exit_code": 0,
+        "stdout": "lspci unavailable\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.734
+      },
+      "dmi_product": {
+        "exit_code": 0,
+        "stdout": "X10SRA\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.903
+      },
+      "dmi_uuid": {
+        "exit_code": 0,
+        "stdout": "00000000-0000-0000-0000-0cc47a7841c6\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.442
+      },
+      "dmi_board_serial": {
+        "exit_code": 0,
+        "stdout": "ZM158S037512\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.792
+      },
+      "machine_id": {
+        "exit_code": 0,
+        "stdout": "5c7135094dfb4344b596c52aeca6aea7\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.761
+      },
+      "boot_id": {
+        "exit_code": 0,
+        "stdout": "eba65d2d-d907-4c59-8be4-9bbb450142ae\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.757
+      },
+      "virt": {
+        "exit_code": 0,
+        "stdout": "docker\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 4.897
+      },
+      "tun_device": {
+        "exit_code": 0,
+        "stdout": "absent\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.994
+      },
+      "vast_env": {
+        "exit_code": 0,
+        "stdout": "PUBLIC_IPADDR=1.208.108.242\nVAST_TCP_PORT_10100=46024\nVAST_TCP_PORT_10200=46092\nVAST_TCP_PORT_1111=46011\nVAST_TCP_PORT_22=46079\nVAST_TCP_PORT_6006=46002\nVAST_TCP_PORT_72299=46094\nVAST_TCP_PORT_8080=46074\nVAST_TCP_PORT_8384=46062\n",
+        "stderr": "Warning: Permanently added '[1.208.108.242]:46079' (ED25519) to the list of known hosts.\r\nWelcome to vast.ai. If authentication fails, try again after a few seconds, and double check your ssh key.\nHave fun!\nAI agents: READ /etc/vast-agents-guide.md (also linked as ./AGENTS.md) before acting on or describing this instance: it is the operating guide. ('vast-capabilities' shows live state only, not the guide.)\n",
+        "duration_s": 3.72
+      }
+    },
     "failed_commands": [],
-    "verified_gpus": [],
-    "verification": {},
-    "auth_ok": false,
-    "auth_detail": "meshweave-host-c (root@1.208.108.242:46079): ssh failed (exit 255). This is an authentication or connectivity problem, not a command error.\n  command: echo __AUTH_OK__\n  stderr: root@1.208.108.242: Permission denied (publickey).",
-    "error": "authentication failed"
+    "verified_gpus": [
+      {
+        "name": "NVIDIA GeForce RTX 2070 SUPER",
+        "uuid": "GPU-8490e6e2-05c2-df76-9896-63a9102fc98e",
+        "driver_version": "580.178.04",
+        "memory_total": "8192 MiB",
+        "memory_free": "7785 MiB",
+        "temperature_c": "28",
+        "power_draw_w": "4.16 W"
+      }
+    ],
+    "verification": {
+      "claimed_gpu": "NVIDIA GeForce RTX 2070 SUPER",
+      "claimed_vram_gib": 8.0,
+      "reported_gpus": [
+        "NVIDIA GeForce RTX 2070 SUPER"
+      ],
+      "mismatches": [],
+      "matches_claim": true
+    },
+    "auth_ok": true,
+    "auth_detail": "authenticated"
   }
 ]

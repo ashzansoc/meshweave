@@ -296,3 +296,28 @@ def describe_auth_methods(host: Host) -> str:
         "true",
     ]
     return shlex.join(argv)
+
+
+async def run_python(
+    host: Host,
+    script: str,
+    args: str = "",
+    *,
+    timeout_s: float = 120.0,
+    connect_timeout_s: float = 10.0,
+    check: bool = False,
+) -> Result:
+    """Run a Python script on a host, passed base64-encoded.
+
+    A multi-line script cannot be embedded in an ssh command line: the remote
+    shell re-parses it and the newlines and quotes break the command. Encoding
+    it avoids every quoting problem at once.
+    """
+    import base64
+
+    encoded = base64.b64encode(script.encode()).decode()
+    if args:
+        remote = f"echo {encoded} | base64 -d | python3 - {args}"
+    else:
+        remote = f"echo {encoded} | base64 -d | python3 -"
+    return await run(host, remote, timeout_s=timeout_s, connect_timeout_s=connect_timeout_s, check=check)

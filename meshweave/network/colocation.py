@@ -25,10 +25,25 @@ class HardwareFingerprint:
 
     Fields are optional because many container runtimes hide them. A missing
     field is ``None``, never a guess.
+
+    Weighting notes, established against real Vast hosts:
+
+    * ``board_serial`` / ``board_name`` / ``sys_vendor`` identify the physical
+      motherboard and are the strongest available signal.
+    * ``boot_id`` is the host kernel's boot identifier. Containers share the host
+      kernel, so two containers on one machine *must* report the same boot_id.
+      A difference is therefore strong evidence of different machines.
+    * ``machine_id`` is **not** evidence of co-location. Containers inherit
+      ``/etc/machine-id`` from the image, so two containers on different physical
+      hosts commonly share it. Real Vast hosts A and C share a machine-id while
+      running on different motherboards.
     """
 
     system_product_name: str | None = None
+    system_vendor: str | None = None
     system_uuid: str | None = None
+    board_vendor: str | None = None
+    board_name: str | None = None
     board_serial: str | None = None
     cpu_model: str | None = None
     cpu_cores: int | None = None
@@ -84,22 +99,23 @@ def compare_fingerprints(a: HardwareFingerprint, b: HardwareFingerprint) -> list
             )
         )
 
-    # Strong: /etc/machine-id identifies the installed OS instance, not the
-    # physical machine. Two containers on one host usually differ here even
-    # though they share hardware, so a *difference* is weak evidence and a
-    # *match* is strong evidence.
+    # machine_id is deliberately NOT evidence. Containers inherit it from the
+    # image, so two containers on different physical hosts routinely share it.
+    # Real Vast hosts A and C share a machine-id while running on different
+    # motherboards; treating a match as "same host" produced a wrong verdict.
     pair = _both(a.machine_id, b.machine_id)
     if pair:
-        same = pair[0] == pair[1]
         evidence.append(
             Evidence(
                 name="machine_id",
-                supports_same_host=same,
-                detail="identical" if same else "differs (expected even on one host)",
-                weight=3 if same else 1,
+                supports_same_host=False,
+                detail="inherited from the container image; uninformative",
+                weight=0,
             )
         )
 
+    # Containers share the host kernel, so boot_id must match for two containers
+    # on one machine. A difference is strong evidence of different machines.
     pair = _both(a.boot_id, b.boot_id)
     if pair:
         same = pair[0] == pair[1]
@@ -107,8 +123,8 @@ def compare_fingerprints(a: HardwareFingerprint, b: HardwareFingerprint) -> list
             Evidence(
                 name="boot_id",
                 supports_same_host=same,
-                detail="identical boot session" if same else "different boot session",
-                weight=2 if same else 1,
+                detail="same kernel boot session" if same else "different kernel boot sessions",
+                weight=3,
             )
         )
 
@@ -121,6 +137,30 @@ def compare_fingerprints(a: HardwareFingerprint, b: HardwareFingerprint) -> list
                 supports_same_host=same,
                 detail=f"{pair[0]} vs {pair[1]}",
                 weight=3,
+            )
+        )
+
+    pair = _both(a.board_name, b.board_name)
+    if pair:
+        same = pair[0] == pair[1]
+        evidence.append(
+            Evidence(
+                name="board_name",
+                supports_same_host=same,
+                detail=f"{pair[0]} vs {pair[1]}",
+                weight=3,
+            )
+        )
+
+    pair = _both(a.system_vendor, b.system_vendor)
+    if pair:
+        same = pair[0] == pair[1]
+        evidence.append(
+            Evidence(
+                name="system_vendor",
+                supports_same_host=same,
+                detail=f"{pair[0]} vs {pair[1]}",
+                weight=2,
             )
         )
 

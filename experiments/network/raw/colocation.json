@@ -1,0 +1,281 @@
+{
+  "hosts": [
+    {
+      "node_id": "meshweave-host-a",
+      "label": "HOST-A",
+      "endpoint": {
+        "host": "1.208.108.242",
+        "port": 51400
+      },
+      "fingerprint": {
+        "system_vendor": "MACHINIST",
+        "system_product_name": null,
+        "board_vendor": "MACHINIST",
+        "board_name": "X99-D8 MAX",
+        "board_serial": "MB-202509082025",
+        "system_uuid": "03000200-0400-0500-0006-000700080009",
+        "machine_id": "5c7135094dfb4344b596c52aeca6aea7",
+        "boot_id": "015873dd-0dfb-4c71-8efb-c6f6d337dedc",
+        "kernel_version": "5.15.0-186-generic",
+        "cpu_model": "Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz",
+        "hostname": "70d0b1aea811"
+      },
+      "gpu_uuids": [
+        "GPU-b921eed5-4c45-3b82-e679-753715639003"
+      ]
+    },
+    {
+      "node_id": "meshweave-host-b",
+      "label": "HOST-B",
+      "endpoint": {
+        "host": "83.63.1.187",
+        "port": 24014
+      },
+      "fingerprint": {
+        "system_vendor": "HP",
+        "system_product_name": "HP Z4 G4 Workstation",
+        "board_vendor": "HP",
+        "board_name": "81C5",
+        "board_serial": "PFPPQ0MCYEM4JM",
+        "system_uuid": "8a5a780b-8557-10ea-f347-e4c9fdd03773",
+        "machine_id": "af1702919cc34995bf2440bc4381dbcf",
+        "boot_id": "16c447a2-7ff6-4e88-9c86-72ed49c998f1",
+        "kernel_version": "7.0.0-42-generic",
+        "cpu_model": "Intel(R) Xeon(R) W-2123 CPU @ 3.60GHz",
+        "hostname": "2d6e3ce8541f"
+      },
+      "gpu_uuids": [
+        "GPU-ce05c91f-8b1e-f63b-552f-864ae6eddec9"
+      ]
+    },
+    {
+      "node_id": "meshweave-host-c",
+      "label": "HOST-C",
+      "endpoint": {
+        "host": "1.208.108.242",
+        "port": 46079
+      },
+      "fingerprint": {
+        "system_vendor": "Supermicro",
+        "system_product_name": "X10SRA",
+        "board_vendor": "Supermicro",
+        "board_name": "X10SRA",
+        "board_serial": "ZM158S037512",
+        "system_uuid": "00000000-0000-0000-0000-0cc47a7841c6",
+        "machine_id": "5c7135094dfb4344b596c52aeca6aea7",
+        "boot_id": "eba65d2d-d907-4c59-8be4-9bbb450142ae",
+        "kernel_version": "6.8.0-147-generic",
+        "cpu_model": "Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz",
+        "hostname": "5c00204b15f7"
+      },
+      "gpu_uuids": [
+        "GPU-8490e6e2-05c2-df76-9896-63a9102fc98e"
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "a": "meshweave-host-a",
+      "b": "meshweave-host-b",
+      "shared_public_ip": false,
+      "verdict": "different-host",
+      "reasons": [
+        "system_uuid: suggests different hosts (03000200-0400-0500-0006-000700080009 vs 8a5a780b-8557-10ea-f347-e4c9fdd03773)",
+        "boot_id: suggests different hosts (different kernel boot sessions)",
+        "board_serial: suggests different hosts (mb-202509082025 vs pfppq0mcyem4jm)",
+        "board_name: suggests different hosts (x99-d8 max vs 81c5)",
+        "system_vendor: suggests different hosts (machinist vs hp)",
+        "cpu_model: suggests different hosts (intel(r) xeon(r) cpu e5-2630 v4 @ 2.20ghz vs intel(r) xeon(r) w-2123 cpu @ 3.60ghz)",
+        "at least one strong identifier differs, which is inconsistent with co-location"
+      ],
+      "evidence": [
+        {
+          "name": "system_uuid",
+          "supports_same_host": false,
+          "detail": "03000200-0400-0500-0006-000700080009 vs 8a5a780b-8557-10ea-f347-e4c9fdd03773",
+          "weight": 3
+        },
+        {
+          "name": "machine_id",
+          "supports_same_host": false,
+          "detail": "inherited from the container image; uninformative",
+          "weight": 0
+        },
+        {
+          "name": "boot_id",
+          "supports_same_host": false,
+          "detail": "different kernel boot sessions",
+          "weight": 3
+        },
+        {
+          "name": "board_serial",
+          "supports_same_host": false,
+          "detail": "mb-202509082025 vs pfppq0mcyem4jm",
+          "weight": 3
+        },
+        {
+          "name": "board_name",
+          "supports_same_host": false,
+          "detail": "x99-d8 max vs 81c5",
+          "weight": 3
+        },
+        {
+          "name": "system_vendor",
+          "supports_same_host": false,
+          "detail": "machinist vs hp",
+          "weight": 2
+        },
+        {
+          "name": "cpu_model",
+          "supports_same_host": false,
+          "detail": "intel(r) xeon(r) cpu e5-2630 v4 @ 2.20ghz vs intel(r) xeon(r) w-2123 cpu @ 3.60ghz",
+          "weight": 1
+        },
+        {
+          "name": "gpu_uuids",
+          "supports_same_host": false,
+          "detail": "no shared UUIDs (GPU-b921eed5\u2026 vs GPU-ce05c91f\u2026)",
+          "weight": 0
+        }
+      ]
+    },
+    {
+      "a": "meshweave-host-a",
+      "b": "meshweave-host-c",
+      "shared_public_ip": true,
+      "verdict": "different-host",
+      "reasons": [
+        "system_uuid: suggests different hosts (03000200-0400-0500-0006-000700080009 vs 00000000-0000-0000-0000-0cc47a7841c6)",
+        "boot_id: suggests different hosts (different kernel boot sessions)",
+        "board_serial: suggests different hosts (mb-202509082025 vs zm158s037512)",
+        "board_name: suggests different hosts (x99-d8 max vs x10sra)",
+        "system_vendor: suggests different hosts (machinist vs supermicro)",
+        "cpu_model: suggests different hosts (intel(r) xeon(r) cpu e5-2630 v4 @ 2.20ghz vs intel(r) xeon(r) cpu e5-1650 v3 @ 3.50ghz)",
+        "at least one strong identifier differs, which is inconsistent with co-location"
+      ],
+      "evidence": [
+        {
+          "name": "system_uuid",
+          "supports_same_host": false,
+          "detail": "03000200-0400-0500-0006-000700080009 vs 00000000-0000-0000-0000-0cc47a7841c6",
+          "weight": 3
+        },
+        {
+          "name": "machine_id",
+          "supports_same_host": false,
+          "detail": "inherited from the container image; uninformative",
+          "weight": 0
+        },
+        {
+          "name": "boot_id",
+          "supports_same_host": false,
+          "detail": "different kernel boot sessions",
+          "weight": 3
+        },
+        {
+          "name": "board_serial",
+          "supports_same_host": false,
+          "detail": "mb-202509082025 vs zm158s037512",
+          "weight": 3
+        },
+        {
+          "name": "board_name",
+          "supports_same_host": false,
+          "detail": "x99-d8 max vs x10sra",
+          "weight": 3
+        },
+        {
+          "name": "system_vendor",
+          "supports_same_host": false,
+          "detail": "machinist vs supermicro",
+          "weight": 2
+        },
+        {
+          "name": "cpu_model",
+          "supports_same_host": false,
+          "detail": "intel(r) xeon(r) cpu e5-2630 v4 @ 2.20ghz vs intel(r) xeon(r) cpu e5-1650 v3 @ 3.50ghz",
+          "weight": 1
+        },
+        {
+          "name": "gpu_uuids",
+          "supports_same_host": false,
+          "detail": "no shared UUIDs (GPU-b921eed5\u2026 vs GPU-8490e6e2\u2026)",
+          "weight": 0
+        }
+      ]
+    },
+    {
+      "a": "meshweave-host-b",
+      "b": "meshweave-host-c",
+      "shared_public_ip": false,
+      "verdict": "different-host",
+      "reasons": [
+        "system_uuid: suggests different hosts (8a5a780b-8557-10ea-f347-e4c9fdd03773 vs 00000000-0000-0000-0000-0cc47a7841c6)",
+        "boot_id: suggests different hosts (different kernel boot sessions)",
+        "board_serial: suggests different hosts (pfppq0mcyem4jm vs zm158s037512)",
+        "board_name: suggests different hosts (81c5 vs x10sra)",
+        "system_vendor: suggests different hosts (hp vs supermicro)",
+        "system_product_name: suggests different hosts (hp z4 g4 workstation vs x10sra (shared across many machines))",
+        "cpu_model: suggests different hosts (intel(r) xeon(r) w-2123 cpu @ 3.60ghz vs intel(r) xeon(r) cpu e5-1650 v3 @ 3.50ghz)",
+        "at least one strong identifier differs, which is inconsistent with co-location"
+      ],
+      "evidence": [
+        {
+          "name": "system_uuid",
+          "supports_same_host": false,
+          "detail": "8a5a780b-8557-10ea-f347-e4c9fdd03773 vs 00000000-0000-0000-0000-0cc47a7841c6",
+          "weight": 3
+        },
+        {
+          "name": "machine_id",
+          "supports_same_host": false,
+          "detail": "inherited from the container image; uninformative",
+          "weight": 0
+        },
+        {
+          "name": "boot_id",
+          "supports_same_host": false,
+          "detail": "different kernel boot sessions",
+          "weight": 3
+        },
+        {
+          "name": "board_serial",
+          "supports_same_host": false,
+          "detail": "pfppq0mcyem4jm vs zm158s037512",
+          "weight": 3
+        },
+        {
+          "name": "board_name",
+          "supports_same_host": false,
+          "detail": "81c5 vs x10sra",
+          "weight": 3
+        },
+        {
+          "name": "system_vendor",
+          "supports_same_host": false,
+          "detail": "hp vs supermicro",
+          "weight": 2
+        },
+        {
+          "name": "system_product_name",
+          "supports_same_host": false,
+          "detail": "hp z4 g4 workstation vs x10sra (shared across many machines)",
+          "weight": 1
+        },
+        {
+          "name": "cpu_model",
+          "supports_same_host": false,
+          "detail": "intel(r) xeon(r) w-2123 cpu @ 3.60ghz vs intel(r) xeon(r) cpu e5-1650 v3 @ 3.50ghz",
+          "weight": 1
+        },
+        {
+          "name": "gpu_uuids",
+          "supports_same_host": false,
+          "detail": "no shared UUIDs (GPU-ce05c91f\u2026 vs GPU-8490e6e2\u2026)",
+          "weight": 0
+        }
+      ]
+    }
+  ],
+  "note": "A shared public IP is recorded but is not evidence of co-location. machine_id is excluded as evidence because containers inherit it from the image. boot_id and board identifiers are the discriminators."
+}

@@ -173,13 +173,42 @@ def test_no_evidence_is_undetermined():
     assert reasons
 
 
-def test_matching_machine_id_is_strong_evidence():
-    """Two containers on one host share /etc/machine-id only if the same OS
-    instance; a match is therefore strong evidence of co-location."""
+def test_matching_machine_id_alone_proves_nothing():
+    """Containers inherit /etc/machine-id from the image, so a match is
+    uninformative. Real Vast hosts A and C share one while running on different
+    motherboards; treating it as proof produced a wrong verdict."""
     a = HardwareFingerprint(machine_id="abc123")
     b = HardwareFingerprint(machine_id="abc123")
     evidence = compare_fingerprints(a, b)
+    assert all(e.weight == 0 for e in evidence if e.name == "machine_id")
     verdict, _ = assess(evidence, measured_rtt_ms=0.4)
+    assert verdict == "undetermined"
+
+
+def test_differing_boot_id_proves_different_machines():
+    """Containers on one host share the kernel, so boot_id must match. A
+    difference means two physical machines."""
+    a = HardwareFingerprint(boot_id="boot-1")
+    b = HardwareFingerprint(boot_id="boot-2")
+    evidence = compare_fingerprints(a, b)
+    verdict, reasons = assess(evidence)
+    assert verdict == "different-host"
+    assert any("boot_id" in r for r in reasons)
+
+
+def test_differing_board_serial_proves_different_machines():
+    a = HardwareFingerprint(board_serial="MB-1", board_name="X99-D8 MAX")
+    b = HardwareFingerprint(board_serial="ZM-2", board_name="X10SRA")
+    evidence = compare_fingerprints(a, b)
+    verdict, _ = assess(evidence)
+    assert verdict == "different-host"
+
+
+def test_matching_board_and_boot_id_confirms_same_host():
+    a = HardwareFingerprint(board_serial="MB-1", board_name="X99", boot_id="b1")
+    b = HardwareFingerprint(board_serial="MB-1", board_name="X99", boot_id="b1")
+    evidence = compare_fingerprints(a, b)
+    verdict, _ = assess(evidence, measured_rtt_ms=0.3)
     assert verdict == "same-host confirmed"
 
 
