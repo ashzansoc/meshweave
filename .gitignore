@@ -32,3 +32,5 @@ reports/*.sqlite
 
 # OS
 .DS_Store
+# Dashboard deps are installed but not committed
+dashboard/node_modules/
