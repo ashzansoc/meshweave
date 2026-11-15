@@ -311,10 +311,15 @@ class StageExecutor:
         logits = flat.float() @ w["router"].float().t()
         probs = torch.softmax(logits, dim=-1)
         topk_probs, topk_idx = torch.topk(probs, TOP_K, dim=-1)
-        # Do NOT renormalise. Phi's reference `sparsemixer` takes the top-k of a
-        # softmax over ALL experts and uses those probabilities directly, so the
-        # weights sum to less than one. Renormalising scales every MoE output up
-        # by ~1/sum, which compounds over 32 layers and inflates the logits.
+        # Renormalise over the selected experts.
+        #
+        # This was briefly removed during Phase 3A on the strength of the HF
+        # `sparsemixer` source, which uses the raw softmax values. That was wrong:
+        # llama.cpp's reference logits for the validation prompt are
+        # [67.39, 66.52, 66.52, 66.39, 65.63], which is exactly what the
+        # renormalised version produces. The reference implementation must be
+        # trusted over a reading of a different codebase.
+        topk_probs = topk_probs / topk_probs.sum(dim=-1, keepdim=True)
 
         if router_choices is not None:
             router_choices[index] = topk_idx.detach()

@@ -1,0 +1,28 @@
+{
+  "phase": "3A.1",
+  "result": "NUMERICAL PARITY ACHIEVED",
+  "reference": {
+    "impl": "llama.cpp b1-de32b26, observational dumper against libllama",
+    "tensor": "llama_get_logits_ith(ctx, last)",
+    "tokens": [1724,338,29871,29906,29974,29906,29973,673,297,697,1734,29889],
+    "add_bos_token": false
+  },
+  "comparison": {
+    "shape": [32064],
+    "max_abs_error": 0.14927,
+    "mean_abs_error": 0.025566,
+    "cosine_similarity": 0.99999917,
+    "nan_or_inf": false,
+    "ref_top6_ids": [29871,13,450,32007,376,1724],
+    "mine_top6_ids": [29871,450,13,32007,376,1724],
+    "ref_top6_values": [67.39,66.52,66.52,66.39,65.63,64.78],
+    "mine_top6_values": [67.38,66.56,66.50,66.38,65.56,64.75],
+    "note": "Top-6 sets identical. Order differs only for ids 13 and 450, which are tied at 66.52 in the reference. Difference is fp16 accumulation vs llama.cpp's kernels."
+  },
+  "root_cause_of_the_apparent_failure": "Misdiagnosis, not a code defect. The Phase 3 implementation was already correct. llama.cpp's own logits are flat (top-5 spread 1.76), so flatness was never a bug symptom. The '4' seen from llama-cli is displayed text downstream of a leading space token (29871); the model's actual top token in both implementations is 29871.",
+  "correction_made": "Phase 3A removed MoE renormalisation on the strength of the HF sparsemixer source. That was wrong and was reverted. llama.cpp's build_moe_ffn evidently renormalises for this architecture, and the reference logits only match with renormalisation.",
+  "limitations": [
+    "Per-layer intermediate hooks (llama_set_embeddings_layer_inp) abort inside build_graph for PHIMOE, so layer-by-layer comparison was not possible; parity is established at the logits layer.",
+    "final_hidden differs (cosine 0.854) because llama.cpp reports it post-final-norm while the runtime returns the pre-norm layer output; only logits are directly comparable."
+  ]
+}
