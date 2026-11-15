@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+node_modules/
+dashboard/dist/
+
+# Secrets and credentials — never commit
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+vast_api_key
+creds/
+
+# Experiment outputs
+reports/raw/
+reports/*.db
+reports/*.sqlite
+*.log
+*.jsonl
+
+# OS
+.DS_Store
