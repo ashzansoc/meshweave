@@ -409,6 +409,66 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
 
     # -- experiment reports ---------------------------------------------
 
+    @app.get("/v1/network")
+    async def get_network() -> dict[str, Any]:
+        """Phase 2A network measurements, read from the experiment evidence.
+
+        Everything here comes from a file written by an instrumented transfer
+        between real hosts. When a file is absent, the section is reported as
+        unmeasured rather than filled with zeros.
+        """
+        import json as _json
+
+        raw = REPO_ROOT / "experiments" / "network" / "raw"
+
+        def _load(name: str) -> Any | None:
+            path = raw / name
+            if not path.exists():
+                return None
+            try:
+                with path.open() as fh:
+                    return _json.load(fh)
+            except (OSError, _json.JSONDecodeError):
+                return None
+
+        tcp = _load("direct_tcp_matrix.json")
+        rtt = _load("rtt_bandwidth.json")
+        coloc = _load("colocation.json")
+        coloc_net = _load("colocation_network.json")
+
+        paths = []
+        if rtt:
+            for entry in rtt.get("paths", []):
+                rtt_data = entry.get("rtt") or {}
+                sustained = entry.get("sustained_15s") or {}
+                paths.append(
+                    {
+                        "source": entry["source"],
+                        "target": entry["target"],
+                        "endpoint": entry.get("endpoint"),
+                        "rtt_p50_ms": rtt_data.get("p50_ms"),
+                        "rtt_p95_ms": rtt_data.get("p95_ms"),
+                        "rtt_p99_ms": rtt_data.get("p99_ms"),
+                        "jitter_ms": rtt_data.get("jitter_ms"),
+                        "packet_loss_pct": (
+                            rtt_data.get("failed_probes", 0) / rtt_data["probes"] * 100.0
+                            if rtt_data.get("probes")
+                            else None
+                        ),
+                        "sustained_mbps": sustained.get("throughput_mbps"),
+                        "measured": rtt_data.get("ok", False),
+                    }
+                )
+
+        return {
+            "measured": bool(paths),
+            "paths": paths,
+            "topology": {"nodes": list((tcp or {}).get("endpoints", {}).keys())},
+            "endpoints": (tcp or {}).get("endpoints", {}),
+            "co-location": _colocation_summary(coloc, coloc_net),
+            "source": "experiments/network/raw/",
+        }
+
     @app.get("/v1/experiments")
     async def list_experiments() -> dict[str, Any]:
         """Index the experiment reports written to disk.
@@ -493,6 +553,31 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         }
 
     return
+
+
+def _colocation_summary(coloc: Any, coloc_net: Any) -> dict[str, Any]:
+    """Condense the co-location evidence into a dashboard-friendly shape."""
+    if not coloc:
+        return {"available": False}
+
+    pairs = coloc.get("pairs", []) if isinstance(coloc, dict) else []
+    hosts = coloc.get("hosts", []) if isinstance(coloc, dict) else []
+    adjacency = (coloc_net or {}).get("network_adjacency", {}) if isinstance(coloc_net, dict) else {}
+
+    return {
+        "available": True,
+        "pairs": [
+            {
+                "a": p.get("a"),
+                "b": p.get("b"),
+                "shared_public_ip": p.get("shared_public_ip"),
+                "verdict": p.get("verdict"),
+            }
+            for p in pairs
+        ],
+        "network_adjacency": adjacency,
+        "host_count": len(hosts),
+    }
 
 
 def _measured_per_hop_rtt(state: CoordinatorState) -> float:
