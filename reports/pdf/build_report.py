@@ -7,16 +7,13 @@ import sys
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
+from reportlab.lib.enums import TA_JUSTIFY
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
-    Image,
-    KeepTogether,
-    PageBreak,
     PageTemplate,
     Paragraph,
     Spacer,
@@ -76,7 +73,7 @@ S["caption"] = ParagraphStyle(
 )
 
 
-def P(text: str, st: str = "body") -> Paragraph:
+def para(text: str, st: str = "body") -> Paragraph:
     return Paragraph(text, S[st])
 
 
@@ -85,7 +82,7 @@ def bullet(text: str) -> Paragraph:
 
 
 def section(title: str) -> list:
-    return [P(title.upper(), "h2")]
+    return [para(title.upper(), "h2")]
 
 
 def table(rows: list[list[str]], widths: list[float], caption: str | None = None) -> list:
@@ -114,7 +111,7 @@ def table(rows: list[list[str]], widths: list[float], caption: str | None = None
     t.setStyle(TableStyle(ts))
     out = [Spacer(1, 3), t]
     if caption:
-        out.append(P(caption, "caption"))
+        out.append(para(caption, "caption"))
     return out
 
 
@@ -168,7 +165,7 @@ def build(path: str) -> None:
 
     # ── 1. Executive summary ──────────────────────────────────────────────
     story += section("Executive summary")
-    story.append(P(
+    story.append(para(
         "MESHWEAVE investigated one question: can GPUs rented from different cloud "
         "providers, on different physical machines, be coordinated to execute one "
         "language model together? Three Vast.ai instances were acquired — an NVIDIA "
@@ -176,7 +173,7 @@ def build(path: str) -> None:
         "total — and a distributed inference system was built, measured and compared "
         "against simpler alternatives."
     ))
-    story.append(P(
+    story.append(para(
         "The distributed system works. A 32-layer Mixture-of-Experts model was split "
         "across all three hosts, each loading only its own layers from local disk, with "
         "only 8 KiB activations crossing the network per token. Output matched the "
@@ -193,7 +190,7 @@ def build(path: str) -> None:
         "bad",
     ))
     story.append(Spacer(1, 4))
-    story.append(P(
+    story.append(para(
         "This report records the engineering, the measurements, and the conclusion. "
         "The negative result is the substance of the work: it is what a fleet of small, "
         "geographically separated GPUs can and cannot do."
@@ -211,7 +208,7 @@ def build(path: str) -> None:
         [0.9, 1.5, 1.0, 0.7, 2.2],
         "Three independently rented Vast.ai instances. Aggregate 22 GB VRAM across three physical machines.",
     )
-    story.append(P(
+    story.append(para(
         "HOST-A and HOST-C share a public IP. That was investigated rather than assumed: "
         "their hardware identifiers differ (different motherboards, different kernels), so "
         "they are separate virtual machines — but their measured round-trip time is "
@@ -229,7 +226,7 @@ def build(path: str) -> None:
 
     # ── 3. What was built ─────────────────────────────────────────────────
     story += section("What was built")
-    story.append(P(
+    story.append(para(
         "A distributed system in the shape the architecture demanded after measurement, "
         "not the shape it started with."
     ))
@@ -266,7 +263,7 @@ def build(path: str) -> None:
 
     # ── 4. The measurement record ─────────────────────────────────────────
     story += section("The measurement record")
-    story.append(P(
+    story.append(para(
         "Every figure below was measured on the real hosts. Nothing is estimated unless "
         "labelled. The progression is the story: each step removed a cost that did not "
         "need to exist."
@@ -279,7 +276,7 @@ def build(path: str) -> None:
         [1.5, 0.85, 1.05, 1.7],
         "Identical output in all three configurations. 5.9× decode improvement from two transport fixes.",
     )
-    story.append(P(
+    story.append(para(
         "The second fix is worth naming because it was a self-inflicted cost: the pipeline "
         "was sending a completion acknowledgement back up the chain and blocking on it, "
         "even though the client was already receiving logits on a separate channel. That "
@@ -297,7 +294,7 @@ def build(path: str) -> None:
 
     # ── 5. Capacity: the claim and its limit ──────────────────────────────
     story += section("Distributed capacity — the claim, and its limit")
-    story.append(P(
+    story.append(para(
         "Phase 4 asked whether a model can be executed that no individual GPU can hold. "
         "The test: Phi-mini-MoE at Q8_0, 7,576 MiB of weights."
     ))
@@ -309,7 +306,7 @@ def build(path: str) -> None:
         [0.8, 1.35, 0.9, 0.9, 1.8],
         "Controlled load attempts, not arithmetic. HOST-B loaded the weights and then failed to allocate the 512 MiB KV cache.",
     )
-    story.append(P(
+    story.append(para(
         "The claim holds, and more sharply than expected: it is not merely that the weights "
         "do not fit, but that the model's <i>working set</i> — weights plus KV cache — exceeds "
         "the largest GPU. No individual GPU in the fleet can host this model GPU-resident."
@@ -325,7 +322,7 @@ def build(path: str) -> None:
 
     # ── 6. The comparison that settles it ────────────────────────────────
     story += section("The comparison that settles the question")
-    story.append(P(
+    story.append(para(
         "Same model file, same prompt, same greedy decoding, measured on the same hardware."
     ))
     story += table(
@@ -337,7 +334,7 @@ def build(path: str) -> None:
         [3.0, 1.1, 1.3],
         "CPU offload measured warm on the smallest host (15 GB RAM) and still 26× faster than distribution.",
     )
-    story.append(P(
+    story.append(para(
         "The reason is structural, not an implementation defect. Two WAN hops at ~310 ms "
         "each add roughly 620 ms to every token; no transport optimisation removes a "
         "physical round trip across a continent. Meanwhile offloading two of thirty-two "
@@ -359,13 +356,13 @@ def build(path: str) -> None:
         [2.3, 3.5],
     )
     story.append(Spacer(1, 6))
-    story.append(P(
+    story.append(para(
         "The distributed path is a <b>capacity mechanism</b>, not a latency one. On this "
         "fleet it is the wrong tool: 22 GB of VRAM across three machines is less useful "
         "than 15-62 GB of RAM on any one of them, and the network costs 300 ms for the "
         "privilege of crossing between them."
     ))
-    story.append(P(
+    story.append(para(
         "The one configuration still worth testing is a two-node split between HOST-A and "
         "HOST-C, whose link measures 0.5 ms rather than 310 ms. That would pay roughly 1 ms "
         "of network per token instead of 450 ms, and could plausibly compete with the "
@@ -376,7 +373,7 @@ def build(path: str) -> None:
 
     # ── 8. Engineering notes ─────────────────────────────────────────────
     story += section("Engineering notes")
-    story.append(P(
+    story.append(para(
         "Several defects were found by measurement rather than inspection. They are recorded "
         "because each cost real time and each is easy to repeat."
     ))
@@ -393,7 +390,7 @@ def build(path: str) -> None:
         [1.6, 1.9, 2.4],
     )
     story.append(Spacer(1, 5))
-    story.append(P(
+    story.append(para(
         "One methodological correction is worth stating plainly: two phases of debugging were "
         "spent chasing a numerical mismatch that did not exist. The output was compared "
         "against <i>rendered text</i> from llama.cpp instead of against its logits vector. "
@@ -403,7 +400,7 @@ def build(path: str) -> None:
 
     # ── 9. Operating constraints ─────────────────────────────────────────
     story += section("Safety and operational record")
-    story.append(P(
+    story.append(para(
         "One incident shaped the operating rules for everything after it: an early cleanup "
         "routine extracted every listening PID from <i>ss</i> output and terminated them, "
         "which killed sshd on all three hosts. The fix was not a better cleanup function but "
@@ -411,7 +408,7 @@ def build(path: str) -> None:
         "process by exact PID, and termination is refused for anything it did not start. "
         "Twenty-nine tests enforce this, including a static scan for forbidden patterns."
     ))
-    story.append(P(
+    story.append(para(
         "When two hosts later became unavailable because of GPU allocations outside the "
         "container's PID namespace, the correct action was to stop and report rather than "
         "work around the rule. That is recorded in the Phase 4.1 report."
@@ -429,12 +426,12 @@ def build(path: str) -> None:
         [1.1, 4.7],
     )
     story.append(Spacer(1, 8))
-    story.append(P(
+    story.append(para(
         '<i>"Can we turn geographically distributed, heterogeneous, independently owned '
         'GPUs into a reliable virtual AI supercomputer?"</i>',
         "body",
     ))
-    story.append(P(
+    story.append(para(
         "On this evidence: they can be coordinated, and they can jointly hold a model no "
         "single card can. Whether that is worth doing depends entirely on the network "
         "between them — and at 300 ms, it is not.",
