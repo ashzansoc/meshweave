@@ -45,5 +45,45 @@
       "Use a runtime that streams activations only (MESHWEAVE own pipeline) with weights loaded from local disk on each host"
     ],
     "note": "Each host already has the full GGUF locally (6.31 GiB). A design that loads from local disk and only sends activations would avoid the transfer entirely."
+  },
+  "single_gpu_baselines": {
+    "measured": true,
+    "model": "phi-mini-moe-Q6_K.gguf (6.31 GiB)",
+    "harness": "llama.cpp llama-cli, -ngl 99, --temp 0, greedy",
+    "results": {
+      "meshweave-host-c": {
+        "gpu": "NVIDIA GeForce RTX 2070 SUPER",
+        "vram_free_mib": 7785,
+        "short_prompt": {
+          "prompt_tps": 213.0,
+          "gen_tps": 109.7,
+          "output": "4",
+          "correct": true
+        },
+        "long_prompt": {
+          "prompt_tps": 341.3,
+          "gen_tps": 133.7
+        },
+        "loaded": true
+      },
+      "meshweave-host-b": {
+        "gpu": "Quadro RTX 4000",
+        "vram_free_mib": 7786,
+        "short_prompt": {
+          "prompt_tps": 84.1,
+          "gen_tps": 63.7,
+          "output": "4",
+          "correct": true
+        },
+        "loaded": true
+      },
+      "meshweave-host-a": {
+        "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+        "vram_free_mib": 5747,
+        "loaded": false,
+        "error": "cudaMalloc failed: out of memory; needs 6354 MiB"
+      }
+    },
+    "conclusion": "The model works on 2 of 3 GPUs. HOST-C is the fastest at 133.7 tok/s generation."
   }
 }

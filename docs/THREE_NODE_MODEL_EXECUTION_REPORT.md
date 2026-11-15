@@ -128,7 +128,34 @@ Rationale, measured where possible:
 
 ---
 
-## 5. What is working (MEASURED)
+## 5. The model works — single-GPU baselines (MEASURED)
+
+Phi-mini-MoE Q6_K loads and generates correct output on two of the three GPUs.
+
+| Host | GPU | Free VRAM | Loads? | Prompt t/s | **Generation t/s** | Output |
+|---|---|---|---|---|---|---|
+| **HOST-C** | RTX 2070 SUPER | 7,785 MiB | **yes** | 341.3 | **133.7** | correct |
+| **HOST-B** | Quadro RTX 4000 | 7,786 MiB | **yes** | 84.1 | **63.7** | correct |
+| HOST-A | GTX 1660 SUPER | 5,747 MiB | **no** — OOM | — | — | — |
+
+Harness: `llama-cli -ngl 99 --temp 0`, greedy decoding, all 32 layers on the GPU.
+
+Correctness check: asked "What is 2+2? Answer in one word." — both hosts answered
+`4`. VRAM returned to 1 MiB after exit, so nothing leaked.
+
+**HOST-C does 133.7 tokens/second.** That single number reframes the whole
+exercise:
+
+- A three-node pipeline over the measured links would add ~310 ms per token at
+  the HOST-B boundary, capping throughput near **3 tokens/second**.
+- Single-GPU HOST-C already does **133.7 tokens/second** — about **45× faster**.
+
+So for *this* model, on *this* fleet, distribution is strictly worse. The model
+fits on HOST-B and HOST-C individually; it does not need three GPUs. Three-node
+execution would be justified only by capacity that a single card lacks, and the
+measurements show that capacity is not needed here.
+
+## 5b. What is working (MEASURED)
 
 - **`ggml-rpc-server` built and verified on HOST-A**: prints
   `Starting RPC server v10.0.0`, binds port 50052, CUDA initialised with
