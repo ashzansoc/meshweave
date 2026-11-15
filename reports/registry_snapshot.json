@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-11-15T11:58:37.514259+00:00",
+  "saved_at": "2026-11-15T12:48:38.168459+00:00",
   "nodes": [
     {
       "node_id": "node-a",
@@ -10,7 +10,7 @@
         "provider": "vast",
         "provider_instance_id": null,
         "region": null,
-        "registered_at": "2026-11-15T11:58:37.513172Z"
+        "registered_at": "2026-11-15T12:48:38.167527Z"
       },
       "inventory": {
         "gpus": [
@@ -64,14 +64,14 @@
           "advertised_up_mbps": null
         },
         "agent_version": "0.0.0+synthetic",
-        "collected_at": "2026-11-15T11:58:37.513166Z"
+        "collected_at": "2026-11-15T12:48:38.167524Z"
       },
       "status": "HEALTHY",
       "reliability_score": null,
       "uptime_fraction": null,
       "observations": 1,
       "missed_heartbeats": 0,
-      "last_heartbeat_at": "2026-11-15T11:58:37.513176Z",
+      "last_heartbeat_at": "2026-11-15T12:48:38.167530Z",
       "hourly_cost_usd": 0.35
     },
     {
@@ -83,7 +83,7 @@
         "provider": "vast",
         "provider_instance_id": null,
         "region": null,
-        "registered_at": "2026-11-15T11:58:37.513617Z"
+        "registered_at": "2026-11-15T12:48:38.167854Z"
       },
       "inventory": {
         "gpus": [
@@ -137,14 +137,14 @@
           "advertised_up_mbps": null
         },
         "agent_version": "0.0.0+synthetic",
-        "collected_at": "2026-11-15T11:58:37.513614Z"
+        "collected_at": "2026-11-15T12:48:38.167851Z"
       },
       "status": "HEALTHY",
       "reliability_score": null,
       "uptime_fraction": null,
       "observations": 1,
       "missed_heartbeats": 0,
-      "last_heartbeat_at": "2026-11-15T11:58:37.513619Z",
+      "last_heartbeat_at": "2026-11-15T12:48:38.167856Z",
       "hourly_cost_usd": 0.29
     },
     {
@@ -156,7 +156,7 @@
         "provider": "vast",
         "provider_instance_id": null,
         "region": null,
-        "registered_at": "2026-11-15T11:58:37.513941Z"
+        "registered_at": "2026-11-15T12:48:38.168142Z"
       },
       "inventory": {
         "gpus": [
@@ -210,14 +210,14 @@
           "advertised_up_mbps": null
         },
         "agent_version": "0.0.0+synthetic",
-        "collected_at": "2026-11-15T11:58:37.513939Z"
+        "collected_at": "2026-11-15T12:48:38.168139Z"
       },
       "status": "HEALTHY",
       "reliability_score": null,
       "uptime_fraction": null,
       "observations": 1,
       "missed_heartbeats": 0,
-      "last_heartbeat_at": "2026-11-15T11:58:37.513943Z",
+      "last_heartbeat_at": "2026-11-15T12:48:38.168143Z",
       "hourly_cost_usd": 0.22
     },
     {
@@ -229,7 +229,7 @@
         "provider": "vast",
         "provider_instance_id": null,
         "region": null,
-        "registered_at": "2026-11-15T11:58:37.514221Z"
+        "registered_at": "2026-11-15T12:48:38.168421Z"
       },
       "inventory": {
         "gpus": [
@@ -283,14 +283,14 @@
           "advertised_up_mbps": null
         },
         "agent_version": "0.0.0+synthetic",
-        "collected_at": "2026-11-15T11:58:37.514219Z"
+        "collected_at": "2026-11-15T12:48:38.168419Z"
       },
       "status": "HEALTHY",
       "reliability_score": null,
       "uptime_fraction": null,
       "observations": 1,
       "missed_heartbeats": 0,
-      "last_heartbeat_at": "2026-11-15T11:58:37.514223Z",
+      "last_heartbeat_at": "2026-11-15T12:48:38.168422Z",
       "hourly_cost_usd": null
     }
   ]
