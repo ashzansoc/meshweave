@@ -101,15 +101,28 @@ Without a key, the experiment blocks and tells you exactly why and what to run.
 
 ## Dashboard
 
+A seven-view React + TypeScript + Tailwind application over the coordinator API.
+
 ```bash
-uv run meshweave coordinator --port 8700   # terminal 1
-cd dashboard && npm install && npm run dev # terminal 2
+uv run meshweave coordinator --port 8700    # terminal 1
+cd dashboard && npm install && npm run dev  # terminal 2  →  http://localhost:5273
 ```
 
-Every numeric field in the dashboard is nullable and renders **not measured**
-rather than zero. A chart of zeros would be a fabrication, so there isn't one.
-Reliability shows as *unknown* until a node has been observed for ten heartbeats,
-because a node that has never been seen is not 100% reliable — it is unknown.
+| View | What it shows |
+|---|---|
+| Overview | cluster totals, session trend lines, node health |
+| Nodes | per-node detail, per-GPU telemetry, link class |
+| Topology | measured-link graph, RTT/jitter/loss matrix, failed probes |
+| Planner | plan for a model/precision, and the configuration cost comparison |
+| Workloads | execution records with event timelines |
+| Experiments | report index and full reports, including blocked ones |
+| Economics | per-node pricing, $/GiB-hr, unknown-cost disclosure |
+
+Every numeric field is nullable and renders **not measured** rather than zero. A
+chart of zeros would be a fabrication, so there isn't one. Reliability shows as
+*unknown* until a node has been observed for ten heartbeats, because a node that
+has never been seen is not 100% reliable — it is unknown. Trend lines are labelled
+as what this browser observed while the page was open, not a stored time series.
 
 ## Documentation
 
