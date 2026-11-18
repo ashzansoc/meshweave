@@ -37,6 +37,25 @@ from meshweave.runtime.model_config import (
 
 GIB = 1024**3
 
+# The agent gained the work queue in this version. An older agent registers and
+# reports telemetry but never polls, so a deployment sent to it is a no-op that
+# looks like a hang.
+MIN_DEPLOY_AGENT = (0, 3, 0)
+
+
+def agent_can_deploy(version: str | None) -> bool:
+    if not version:
+        return False
+    parts: list[int] = []
+    for piece in version.split(".")[:3]:
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            parts.append(0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts) >= MIN_DEPLOY_AGENT
+
 
 def utcnow() -> str:
     return datetime.now(UTC).isoformat()
@@ -308,6 +327,14 @@ def plan_deployment(
         if inventory is None or not inventory.gpus:
             raise DeploymentRejected(
                 f"{record.node_id} reports no GPU, so it cannot hold a stage"
+            )
+
+        version = inventory.agent_version
+        if not agent_can_deploy(version):
+            raise DeploymentRejected(
+                f"{record.node_id} runs agent {version or 'unknown'}; deployments need "
+                f"{'.'.join(str(p) for p in MIN_DEPLOY_AGENT)} or newer, because that is the "
+                "agent that polls for work. Re-run the installer on that node."
             )
 
         gpus = inventory.gpus

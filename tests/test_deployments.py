@@ -46,6 +46,7 @@ def node(
     mapped: dict[int, int] | None = None,
     external_ip: str | None = "203.0.113.9",
     gpus: int = 1,
+    agent_version: str = "0.3.0",
 ) -> NodeRecord:
     inventory = GpuInventory(
         gpus=[
@@ -65,14 +66,14 @@ def node(
             external_ip=external_ip,
             mapped_ports=mapped or {},
         ),
-        agent_version="test",
+        agent_version=agent_version,
     )
     from meshweave.core import NodeRegistration
 
     return NodeRecord(
         node_id=node_id,
         registration=NodeRegistration(
-            node_id=node_id, hostname=node_id, agent_version="test", provider="manual"
+            node_id=node_id, hostname=node_id, agent_version=agent_version, provider="manual"
         ),
         inventory=inventory,
     )
@@ -264,3 +265,30 @@ def test_stop_is_dispatched_when_the_deployment_is_stopped() -> None:
 
     kinds = [c["kind"] for c in store.commands_for("a")]
     assert kinds == ["stop_stage"]
+
+
+def test_an_agent_that_cannot_poll_is_refused_with_the_version() -> None:
+    """0.2.0 registers and heartbeats but never polls for work.
+
+    Sending it a stage produces silence, which is worse than a refusal: the
+    deployment looks hung rather than unsupported.
+    """
+    config = DenseConfig.from_json(QWEN_05B)
+    with pytest.raises(DeploymentRejected) as excinfo:
+        plan_deployment(
+            model="Qwen/Qwen2.5-0.5B-Instruct",
+            records=[node("old", mapped={10100: 41000}, agent_version="0.2.0")],
+            config=config,
+        )
+    message = str(excinfo.value)
+    assert "0.2.0" in message and "0.3.0" in message and "installer" in message
+
+
+def test_the_version_comparison_is_numeric_not_lexical() -> None:
+    from meshweave.coordinator.deployments import agent_can_deploy
+
+    assert agent_can_deploy("0.3.0")
+    assert agent_can_deploy("0.10.1")
+    assert agent_can_deploy("1.0.0")
+    assert not agent_can_deploy("0.2.9")
+    assert not agent_can_deploy(None)

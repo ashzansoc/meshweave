@@ -21,8 +21,43 @@ interface ReadinessNode {
 // needing an update rather than silently accepting a launch.
 const DEPLOY_AGENT = '0.3.0'
 
+function versionAtLeast(version: string | null, minimum: string): boolean {
+  if (!version) return false
+  const parse = (v: string): number[] => {
+    const parts = v.split('.').map((part) => Number.parseInt(part, 10))
+    return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0]
+  }
+  const left = parse(version)
+  const right = parse(minimum)
+  for (let i = 0; i < 3; i += 1) {
+    const a = left[i] ?? 0
+    const b = right[i] ?? 0
+    if (a !== b) return a > b
+  }
+  return true
+}
+
+function agentReady(node: ReadinessNode): boolean {
+  return versionAtLeast(node.agent_version, DEPLOY_AGENT)
+}
+
+function publishedPorts(node: ReadinessNode): string[] {
+  return Object.keys(node.mapped_ports ?? {}).filter((port) => port !== '22')
+}
+
+function nodeAgentReady(node: ReadinessNode): boolean {
+  return versionAtLeast(node.agent_version, DEPLOY_AGENT)
+}
+
 function canDeploy(node: ReadinessNode): boolean {
-  return Boolean(node.can_host) && (node.agent_version ?? '') >= DEPLOY_AGENT
+  return Boolean(node.can_host) && agentReady(node)
+}
+
+/** Why a node cannot be selected, in the order that matters to the operator. */
+function blockReason(node: ReadinessNode): string | null {
+  if (!node.can_host) return 'no usable GPU'
+  if (!agentReady(node)) return `agent ${node.agent_version ?? 'unknown'} cannot take deployments yet`
+  return null
 }
 
 interface StageView {
@@ -166,12 +201,38 @@ export function Deploy() {
           placeholder="https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct"
         />
 
+        {nodes.length > 0 && nodes.every((n) => !canDeploy(n)) && (
+          <div className="mt-4 rounded border border-amber-900/60 bg-amber-950/25 px-3 py-2 text-xs text-amber-200">
+            <p className="font-medium text-amber-300">
+              No node can take a deployment yet. Nothing is wrong with the GPUs.
+            </p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {nodes.some((n) => !nodeAgentReady(n)) && (
+                <li>
+                  The agent must be 0.3.0 or newer; it is what polls for work and
+                  starts a stage. Re-run the installer on each node:
+                  <code className="mt-1 block overflow-x-auto whitespace-nowrap rounded bg-neutral-950 px-2 py-1 font-mono text-[10px] text-neutral-400">
+                    curl -fsSL https://raw.githubusercontent.com/ashzansoc/meshweave/main/deploy/install.sh | sudo bash -s -- --coordinator &lt;coordinator URL&gt; --token &lt;enrollment token&gt; --enroll
+                  </code>
+                </li>
+              )}
+              {nodes.some((n) => publishedPorts(n).length === 0) && (
+                <li>
+                  A multi-node deployment also needs a published TCP port on each
+                  node, so the next stage can connect. Publish one on the instance
+                  (any port other than 22) and re-run the installer.
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+
         <div className="mt-4 space-y-2">
           {nodes.length === 0 && (
             <p className="text-sm text-neutral-500">no nodes registered</p>
           )}
           {nodes.map((node) => {
-            const ports = Object.keys(node.mapped_ports ?? {}).filter((p) => p !== '22')
+            const ports = publishedPorts(node)
             const selectedHere = selected.includes(node.node_id)
             const deployable = canDeploy(node)
             return (
@@ -194,7 +255,13 @@ export function Deploy() {
                     className="h-3.5 w-3.5 accent-neutral-300"
                   />
                   <span className="font-mono text-[12px] text-neutral-200">{node.node_id}</span>
-                  {node.can_host ? <Badge tone="good">can host</Badge> : <Badge tone="bad">no GPU</Badge>}
+                  {canDeploy(node) ? (
+                    <Badge tone="good">ready</Badge>
+                  ) : (
+                    <Badge tone={node.can_host ? 'warn' : 'bad'}>
+                      {node.can_host ? 'needs update' : 'no GPU'}
+                    </Badge>
+                  )}
                 </span>
                 <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-neutral-500">
                   <span>{node.gpu_name ?? 'no GPU'}</span>
@@ -208,9 +275,14 @@ export function Deploy() {
                     {ports.length ? `ports ${ports.slice(0, 3).join(', ')}` : 'no published port'}
                   </span>
                   <span className={deployable ? 'text-neutral-600' : 'text-amber-400'}>
-                    {deployable ? `agent ${node.agent_version}` : `agent ${node.agent_version ?? 'unknown'} — re-run the installer`}
+                    agent {node.agent_version ?? 'unknown'}
                   </span>
                 </span>
+                {!deployable && (
+                  <span className="w-full text-[11px] text-amber-400">
+                    cannot be selected: {blockReason(node)}
+                  </span>
+                )}
               </label>
             )
           })}
