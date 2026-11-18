@@ -189,6 +189,10 @@ class DeploymentResult(BaseModel):
     world: int | None = None
     rank: int | None = None
     gpu_during_generation: dict[str, Any] | None = None
+    # Prefill and decode are separate workloads; per-step timings let a caller
+    # compute inter-token latency percentiles rather than only a mean.
+    prefill_ms: float | None = None
+    step_ms: list[float] | None = None
 
 
 class PromptRequest(BaseModel):

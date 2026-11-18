@@ -416,8 +416,10 @@ class RankZero:
 
         hidden = self.stage.embed(torch.tensor([input_ids], dtype=torch.long, device=self.stage.device))
         position = 0
+        prefill_start = time.perf_counter()
         hop_start = time.perf_counter()
         result = self._forward(hidden, position, req, temperature, top_p)
+        prefill_ms = (time.perf_counter() - prefill_start) * 1000.0
         round_trips.append((time.perf_counter() - hop_start) * 1000.0)
         bytes_sent += hidden.numel() * 2  # fp16 on the wire
         position += len(input_ids)
@@ -471,6 +473,10 @@ class RankZero:
             ),
             "world": self.world,
             "rank": self.rank,
+            # Prefill and decode are different workloads; reporting one combined
+            # rate hides which of them a change actually helped.
+            "prefill_ms": round(prefill_ms, 2),
+            "step_ms": [round(v, 2) for v in step_times],
         }
 
     def _forward(

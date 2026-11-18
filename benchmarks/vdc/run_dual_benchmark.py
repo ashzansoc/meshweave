@@ -91,7 +91,7 @@ def submit_and_wait(base: str, deployment_id: str, prompt: str, tokens: int,
         for result in snapshot.get("results", []):
             if result.get("prompt_id") == prompt_id:
                 return result
-        time.sleep(1.0)
+        time.sleep(0.15)
     return {"error": "no result arrived"}
 
 
@@ -104,7 +104,9 @@ def run_level(base: str, deployment_id: str, concurrency: int, prompt: str,
     def worker(index: int) -> None:
         # Align the start so the requests genuinely overlap.
         time.sleep(barrier_hold)
+        started = time.perf_counter()
         outcome = submit_and_wait(base, deployment_id, f"{prompt} ({index})", tokens)
+        outcome["_observed_s"] = time.perf_counter() - started
         with lock:
             results.append(outcome)
 
@@ -127,6 +129,9 @@ def run_level(base: str, deployment_id: str, concurrency: int, prompt: str,
     ]
 
     generation_s = sum(r["total_s"] for r in ok if r.get("total_s"))
+    step_samples = [ms for r in ok for ms in (r.get("step_ms") or [])]
+    prefill_ms = [r["prefill_ms"] for r in ok if r.get("prefill_ms")]
+    input_tokens = sum(r.get("prompt_tokens") or 0 for r in ok)
     return {
         "concurrency": concurrency,
         "requested": concurrency,
@@ -148,8 +153,58 @@ def run_level(base: str, deployment_id: str, concurrency: int, prompt: str,
         "ttft_p50_ms": _mean_of([r.get("ttft_ms") for r in ok]),
         "ms_per_token_mean": _mean_of([r.get("ms_per_token") for r in ok]),
         "activation_bytes_per_token": _first_of([r.get("activation_bytes_per_token") for r in ok]),
+        # Inter-token latency from the runner's own per-step timings.
+        "itl_p50_ms": round(_percentile(step_samples, 0.50), 2) if step_samples else None,
+        "itl_p95_ms": round(_percentile(step_samples, 0.95), 2) if step_samples else None,
+        "itl_mean_ms": round(statistics.mean(step_samples), 2) if step_samples else None,
+        # Prefill is a different workload from decode: report its rate separately.
+        "prefill_ms_p50": round(_percentile(prefill_ms, 0.50), 2) if prefill_ms else None,
+        "prefill_tps_mean": (
+            round(input_tokens / (sum(prefill_ms) / 1000.0), 1)
+            if prefill_ms and sum(prefill_ms) > 0 and input_tokens
+            else None
+        ),
+        "input_tokens_total": input_tokens,
+        "generation_s_total": round(generation_s, 3),
+        "requests": [
+            {
+                "prompt_tokens": r.get("prompt_tokens"),
+                "output_tokens": r.get("output_tokens"),
+                "total_s": r.get("total_s"),
+                "ttft_ms": r.get("ttft_ms"),
+                "prefill_ms": r.get("prefill_ms"),
+                "node_id": r.get("node_id"),
+            }
+            for r in ok
+        ],
         "errors": [r.get("error") for r in results if r.get("error")][:5],
     }
+
+
+def _summarise_runs(concurrency: int, runs: list[dict]) -> dict:
+    """Collapse repeats into one row, keeping the spread.
+
+    A single measurement of a 16-token request is mostly fixed overhead; reporting
+    the spread makes it obvious when a difference is inside the noise.
+    """
+    aggregates = [r["aggregate_tps"] for r in runs if r.get("aggregate_tps") is not None]
+    singles = [
+        r["single_request_tps_mean"]
+        for r in runs
+        if r.get("single_request_tps_mean") is not None
+    ]
+    merged = dict(runs[-1])
+    merged["concurrency"] = concurrency
+    merged["repeats"] = len(runs)
+    merged["aggregate_tps_runs"] = aggregates
+    merged["single_request_tps_runs"] = singles
+    merged["aggregate_tps"] = round(statistics.mean(aggregates), 3) if aggregates else None
+    merged["aggregate_tps_min"] = round(min(aggregates), 3) if aggregates else None
+    merged["aggregate_tps_max"] = round(max(aggregates), 3) if aggregates else None
+    merged["single_request_tps_mean"] = (
+        round(statistics.mean(singles), 3) if singles else None
+    )
+    return merged
 
 
 def _percentile(values: list[float], fraction: float) -> float:
@@ -180,6 +235,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--prompt", default="The capital of France is")
     parser.add_argument("--tokens", type=int, default=32)
     parser.add_argument("--out", default=str(RESULTS))
+    parser.add_argument(
+        "--repeats",
+        type=int,
+        default=3,
+        help="measurements per configuration; variation is reported",
+    )
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        default=True,
+        help="one untimed request before measuring (default on)",
+    )
     args = parser.parse_args(argv)
 
     created = api(
@@ -198,18 +265,27 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         wait_until_running(args.coordinator, deployment_id)
+        if args.warmup:
+            # Load the model into GPU memory and open the control socket before
+            # anything is timed, so a cold start is not counted as throughput.
+            print("warm-up request (not measured)")
+            submit_and_wait(args.coordinator, deployment_id, args.prompt, 4)
+
         levels = []
         for concurrency in args.concurrency:
-            print(f"\n== concurrency {concurrency}")
-            level = run_level(
-                args.coordinator, deployment_id, concurrency, args.prompt,
-                args.tokens, barrier_hold=1.0,
-            )
-            levels.append(level)
-            print(f"   succeeded {level['succeeded']}/{level['requested']}  "
-                  f"aggregate {level['aggregate_tps']} tok/s  "
-                  f"single-request {level['single_request_tps_mean']} tok/s  "
-                  f"p95 {level['latency_p95_s']} s")
+            runs = []
+            for repeat in range(max(1, args.repeats)):
+                print(f"\n== concurrency {concurrency}, repeat {repeat + 1}/{args.repeats}")
+                level = run_level(
+                    args.coordinator, deployment_id, concurrency, args.prompt,
+                    args.tokens, barrier_hold=1.0,
+                )
+                runs.append(level)
+                print(f"   succeeded {level['succeeded']}/{level['requested']}  "
+                      f"aggregate {level['aggregate_tps']} tok/s  "
+                      f"single-request {level['single_request_tps_mean']} tok/s  "
+                      f"p95 {level['latency_p95_s']} s")
+            levels.append(_summarise_runs(concurrency, runs))
     finally:
         api(args.coordinator, "POST", f"/v1/deployments/{deployment_id}/stop", {})
 
