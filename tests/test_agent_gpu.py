@@ -116,3 +116,11 @@ def test_the_driver_read_happens_outside_the_device_loop() -> None:
     body = source[source.index("def gpu_inventory") :]
     assert "def opt(" not in body
     assert "_nvml_safe(pynvml.nvmlSystemGetDriverVersion)" in body
+
+def test_the_recorded_log_path_is_the_one_the_process_writes() -> None:
+    """Writing to one filename and reading another made every stage look stuck
+    in 'loading': the agent read a file that did not exist."""
+    source = AGENT_PY.read_text()
+    assignments = [line for line in source.splitlines() if "log_path = LOG_DIR" in line]
+    assert len(assignments) == 1, assignments
+    assert "replica" in assignments[0]

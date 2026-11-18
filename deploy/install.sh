@@ -864,6 +864,7 @@ def start_stage(command: dict) -> dict:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"meshweave-stage-{deployment_id}-r{command.get('replica', 0)}.log"
+
     handle = log_path.open("a")
     try:
         proc = subprocess.Popen(
@@ -881,7 +882,6 @@ def start_stage(command: dict) -> dict:
     finally:
         handle.close()
 
-    log_path = LOG_DIR / f"meshweave-stage-{stage_key.replace('#', '-')}.log"
     state[stage_key] = {
         "pid": proc.pid,
         "log": str(log_path),
