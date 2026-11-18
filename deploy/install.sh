@@ -594,14 +594,18 @@ class Coordinator:
         node_id: str,
         ca: str | None = None,
         enroll: bool = False,
+        enrollment_token: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         # Two credentials, deliberately kept apart: the enrollment token proves a
         # host may join, the node token proves which node is asking for work.
-        # Swapping the bearer after registration must not change what is sent as
-        # the enrollment header.
+        # ``token`` is the bearer and becomes the node token after registration;
+        # ``enrollment_token`` is what is sent in the enrollment header and must
+        # stay the shared bootstrap secret. Passing the bearer as the enrollment
+        # token produced a 401 on every restart, because the node token is not a
+        # valid enrollment secret.
         self.token = token
-        self.enrollment_token = token if enroll else None
+        self.enrollment_token = enrollment_token or (token if enroll else None)
         self.node_id = node_id
         self.enroll = enroll
         self._ssl = ssl.create_default_context(cafile=ca) if ca else None
@@ -1224,6 +1228,7 @@ def main() -> int:
         node_id,
         cfg.get("ca"),
         enroll=bool(cfg.get("enroll") or args.enroll),
+        enrollment_token=cfg["token"],
     )
 
     inv = build_inventory()
