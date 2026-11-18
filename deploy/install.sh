@@ -312,7 +312,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-AGENT_VERSION = "0.4.0"
+AGENT_VERSION = "0.4.1"
 CONFIG_PATH = Path(os.environ.get("MESHWEAVE_AGENT_CONFIG", "/etc/meshweave/agent.json"))
 
 # Node names are generated, not derived from the hostname. A rented container
@@ -430,6 +430,11 @@ def gpu_inventory() -> list[dict]:
 
     pynvml.nvmlInit()
     try:
+        # System-wide, so it takes no device handle. Passing one raised and was
+        # swallowed by opt(), which reported the driver version as unknown.
+        driver = opt(pynvml.nvmlSystemGetDriverVersion)
+        if isinstance(driver, bytes):
+            driver = driver.decode()
         count = pynvml.nvmlDeviceGetCount()
         gpus = []
         for i in range(count):
@@ -456,9 +461,6 @@ def gpu_inventory() -> list[dict]:
             power = opt(pynvml.nvmlDeviceGetPowerUsage)
             temp = opt(pynvml.nvmlDeviceGetTemperature)
             capability = opt(pynvml.nvmlDeviceGetCudaComputeCapability)
-            driver = opt(pynvml.nvmlSystemGetDriverVersion)
-            if isinstance(driver, bytes):
-                driver = driver.decode()
 
             gpus.append(
                 {

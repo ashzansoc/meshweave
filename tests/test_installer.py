@@ -246,3 +246,13 @@ def test_the_leftover_agent_sweep_is_auditable() -> None:
     assert "/proc" in sweep
     assert "ps -eo pid=,command=" in sweep
     assert "_kill_pid" in sweep
+
+
+def test_the_driver_version_is_read_without_a_device_handle() -> None:
+    """nvmlSystemGetDriverVersion takes no handle. Passing one raised, the error
+    was swallowed, and every node reported an unknown driver version."""
+    source = AGENT_PY.read_text()
+    call = "opt(pynvml.nvmlSystemGetDriverVersion)"
+    assert call in source
+    # It must not be inside the per-GPU loop's opt(handle) form.
+    assert "opt(pynvml.nvmlSystemGetDriverVersion, h" not in source
