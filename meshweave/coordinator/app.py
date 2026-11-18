@@ -174,6 +174,16 @@ class DeploymentResult(BaseModel):
     node_id: str | None = None
     prompt_id: str | None = None
 
+    # Evidence, not decoration. Without these fields the runner computes them and
+    # the model silently drops them, so a distributed request reports nothing
+    # about the activations it moved or the GPU that was busy.
+    stage_roundtrip_ms: float | None = None
+    activation_bytes_per_token: float | None = None
+    activation_bytes_sent: int | None = None
+    world: int | None = None
+    rank: int | None = None
+    gpu_during_generation: dict[str, Any] | None = None
+
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -655,10 +665,13 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         return {
             "node_id": node_id,
             "commands": [a.model_dump(mode="json") for a in pending],
-            # Stages and prompts for the deployments this node takes part in.
-            # The agent acts on run_stage, stop_stage and run_prompt only.
-            "deployment_commands": state.deployments.commands_for(node_id),
-            "network_commands": state.network.commands_for(node_id),
+            # One command list, not two. Stages, prompts and link probes all
+            # arrive here; a second key would have been invisible to the agents
+            # already deployed, which read only this one.
+            "deployment_commands": (
+                state.deployments.commands_for(node_id)
+                + state.network.commands_for(node_id)
+            ),
             "heartbeat_interval_s": state.settings.heartbeat_timeout_s / 3.0,
         }
 

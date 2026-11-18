@@ -962,19 +962,48 @@ def run_prompt(command: dict) -> dict:
 _ECHO_SERVERS: dict[str, object] = {}
 
 
+def _self_address(internal_port: int) -> str | None:
+    """Where a peer should dial this node for a port we are listening on."""
+    external = _published_tcp_ports().get(internal_port)
+    host = os.environ.get("PUBLIC_IPADDR") or _private_ip()
+    if not external or not host:
+        return None
+    return f"{host}:{external}"
+
+
 def start_echo(command: dict) -> dict:
-    """Listen on the port the coordinator chose, for a bounded time."""
+    """Listen on one of the coordinator's candidates, for a bounded time.
+
+    A provider publishes ports that the container itself may already use, so the
+    first candidate can be occupied. Try each in turn and report the one that
+    worked, together with the address a peer must dial -- the coordinator cannot
+    know which port won.
+    """
     from meshweave.runtime.echo import EchoServer
 
     measurement_id = str(command["measurement_id"])
-    port = int(command["port"])
     existing = _ECHO_SERVERS.get(measurement_id)
-    if existing is None:
-        server = EchoServer("0.0.0.0", port, ttl_s=float(command.get("ttl_s", 180)))
-        server.start()
+    if existing is not None:
+        port = int(existing.port)  # type: ignore[attr-defined]
+        return {"phase": "echo_ready", "payload": {"port": port, "address": _self_address(port)}}
+
+    candidates = command.get("ports") or [command.get("port")]
+    last_error = "no candidate ports were supplied"
+    for candidate in candidates:
+        port = int(candidate)
+        try:
+            server = EchoServer("0.0.0.0", port, ttl_s=float(command.get("ttl_s", 180)))
+            server.start()
+        except OSError as exc:
+            last_error = f"port {port}: {exc}"
+            continue
         _ECHO_SERVERS[measurement_id] = server
         print(f"echo listening on 0.0.0.0:{port} for {measurement_id}", file=sys.stderr, flush=True)
-    return {"phase": "echo_ready", "payload": {"port": port}}
+        return {
+            "phase": "echo_ready",
+            "payload": {"port": port, "address": _self_address(port)},
+        }
+    return {"phase": "error", "payload": {"error": last_error}}
 
 
 def run_probe(command: dict) -> dict:

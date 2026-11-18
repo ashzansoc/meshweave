@@ -318,3 +318,28 @@ def test_a_known_free_port_is_preferred_over_a_low_one() -> None:
 def test_without_a_preferred_port_the_highest_is_used() -> None:
     record = node("a", mapped={1111: 11517, 6006: 11471, 8080: 11568})
     assert pick_port(record.inventory) == (8080, 11568)
+
+
+def test_a_port_that_cannot_be_bound_is_ignored() -> None:
+    """Vast publishes an entry whose internal value (72299) is not a TCP port.
+    Choosing it made the stage fail with OverflowError at bind()."""
+    record = node("a", mapped={"72299": 46012, "22": 46063, "10100": 46058})
+    internal, _ = pick_port(record.inventory)
+    assert internal == 10100
+
+    only_bad = node("b", mapped={"72299": 46012})
+    assert pick_port(only_bad.inventory) is None
+
+
+def test_a_qwen2_config_without_attention_bias_still_loads_the_biases() -> None:
+    """Qwen/Qwen2.5-0.5B-Instruct's config.json has no attention_bias key, but
+    its checkpoint has q_proj.bias, k_proj.bias and v_proj.bias. Defaulting to
+    False computed attention without them."""
+    from meshweave.runtime.dense import layer_keys
+    from meshweave.runtime.model_config import DenseConfig
+
+    # The real Qwen/Qwen2.5-0.5B-Instruct config.json has no attention_bias key.
+    without = {k: v for k, v in QWEN_05B.items() if k != "attention_bias"}
+    config = DenseConfig.from_json(without)
+    assert config.attn_bias is True
+    assert "model.layers.0.self_attn.q_proj.bias" in layer_keys(config, 0)

@@ -338,7 +338,17 @@ def pick_port(node_inventory: Any) -> tuple[int, int] | None:
     in a multi-node chain, because the next stage has nowhere to connect.
     """
     mapped = getattr(getattr(node_inventory, "network", None), "mapped_ports", {}) or {}
-    candidates = [(int(k), int(v)) for k, v in mapped.items() if int(k) != 22]
+    candidates = []
+    for key, value in mapped.items():
+        try:
+            internal, external = int(key), int(value)
+        except (TypeError, ValueError):
+            continue
+        # Only a real TCP port can be bound. Some providers report entries whose
+        # internal value is not a port at all.
+        if internal == 22 or not (1 <= internal <= 65535 and 1 <= external <= 65535):
+            continue
+        candidates.append((internal, external))
     if not candidates:
         return None
 

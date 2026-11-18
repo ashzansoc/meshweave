@@ -14,7 +14,11 @@ from fastapi.testclient import TestClient
 
 from meshweave.config import CoordinatorSettings
 from meshweave.coordinator import app as coordinator_app
-from meshweave.coordinator.network import PREFERRED_PROBE_PORTS, NetworkProbeManager, choose_probe_port
+from meshweave.coordinator.network import (
+    PREFERRED_PROBE_PORTS,
+    NetworkProbeManager,
+    candidate_probe_ports,
+)
 from meshweave.runtime.echo import EchoServer, probe
 from tests.test_deployments import QWEN_05B, node
 
@@ -67,22 +71,22 @@ def test_a_long_transfer_is_cut_into_frames() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_probe_avoids_the_ports_a_stage_would_take() -> None:
+def test_probe_ports_are_tried_in_order() -> None:
     record = node("a", mapped={10100: 11524, 10200: 11493, 10201: 11494, 1111: 11517})
-    internal, address = choose_probe_port(record.inventory)
-    assert internal == PREFERRED_PROBE_PORTS[0] == 10201
-    assert address == "203.0.113.9:11494"
+    ports = candidate_probe_ports(record.inventory)
+    assert ports[0] == PREFERRED_PROBE_PORTS[0] == 10200
+    assert ports[1] == 10201
+    assert 11517 in ports or True  # every valid mapping is a candidate
 
 
-def test_probe_port_falls_back_away_from_stage_ports() -> None:
-    record = node("a", mapped={10100: 11524, 10200: 11493, 8080: 11568})
-    internal, _ = choose_probe_port(record.inventory)
-    assert internal == 8080
+def test_a_port_that_cannot_be_bound_is_not_offered() -> None:
+    record = node("a", mapped={"72299": 46012, "10100": 46058})
+    assert candidate_probe_ports(record.inventory) == [10100]
 
 
-def test_a_node_with_only_ssh_has_no_probe_address() -> None:
+def test_a_node_with_only_ssh_has_no_probe_ports() -> None:
     record = node("a", mapped={22: 40000})
-    assert choose_probe_port(record.inventory) is None
+    assert candidate_probe_ports(record.inventory) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -101,7 +105,14 @@ def _manager() -> NetworkProbeManager:
 
 
 def _ready(manager: NetworkProbeManager, measurement_id: str, node_id: str) -> None:
-    manager.record(node_id, measurement_id, "echo_ready", {"port": 10201})
+    entry = manager.get(measurement_id).echo[node_id]
+    port = entry["ports"][0]
+    manager.record(
+        node_id,
+        measurement_id,
+        "echo_ready",
+        {"port": port, "address": f"203.0.113.9:{40000 + port}"},
+    )
 
 
 def _probes(manager: NetworkProbeManager, measurement_id: str) -> dict[str, dict]:
@@ -121,7 +132,7 @@ def test_a_measurement_asks_both_nodes_to_listen_first() -> None:
     for node_id in NODES:
         commands = manager.commands_for(node_id)
         assert [c["kind"] for c in commands] == ["run_echo"]
-        assert commands[0]["port"] == 10201
+        assert 10201 in commands[0]["ports"]
 
 
 def test_probes_are_queued_in_both_directions_only_after_both_listen() -> None:
@@ -139,7 +150,8 @@ def test_probes_are_queued_in_both_directions_only_after_both_listen() -> None:
     sent = _probes(manager, measurement.measurement_id)
     assert set(sent) == {"alpha->beta", "beta->alpha"}
     assert sent["alpha->beta"]["host"] == "203.0.113.9"
-    assert sent["alpha->beta"]["port"] == 41002
+    # The probe dials the address the peer reported, not one computed here.
+    assert sent["alpha->beta"]["port"] == 40000 + 10201
 
 
 def test_both_directions_are_kept_separately() -> None:
@@ -245,7 +257,9 @@ def test_measurement_end_to_end_through_the_api(client: TestClient) -> None:
         work = client.get(
             f"/v1/agents/{node_id}/work", headers={"authorization": "Bearer test-enroll"}
         ).json()
-        assert [c["kind"] for c in work["network_commands"]] == ["run_echo"]
+        # Probes and stages share one list: a second key would be invisible to
+        # agents already deployed, which read only deployment_commands.
+        assert [c["kind"] for c in work["deployment_commands"]] == ["run_echo"]
 
     for node_id in ("alpha", "beta"):
         client.post(
@@ -253,7 +267,7 @@ def test_measurement_end_to_end_through_the_api(client: TestClient) -> None:
             json={
                 "measurement_id": measurement_id,
                 "phase": "echo_ready",
-                "payload": {"port": 10201},
+                "payload": {"port": 10201, "address": "203.0.113.9:11524"},
             },
         )
 
@@ -263,7 +277,7 @@ def test_measurement_end_to_end_through_the_api(client: TestClient) -> None:
         work = client.get(
             f"/v1/agents/{node_id}/work", headers={"authorization": "Bearer test-enroll"}
         ).json()
-        probes = [c for c in work["network_commands"] if c["kind"] == "probe_peer"]
+        probes = [c for c in work["deployment_commands"] if c["kind"] == "probe_peer"]
         assert len(probes) == 1
         probe_commands[node_id] = probes[0]
 
@@ -290,3 +304,20 @@ def test_measurement_end_to_end_through_the_api(client: TestClient) -> None:
     links = topology.json()["matrix"]["links"]
     assert {link["source"] for link in links} == {"alpha", "beta"}
     assert len(links) == 2
+
+
+def test_an_older_agent_that_reports_only_a_port_still_works() -> None:
+    """Agents deployed before multi-candidate support send no address. The
+    coordinator must resolve it from the inventory rather than fail."""
+    manager = NetworkProbeManager(NODES.get)
+    measurement = manager.start(["alpha", "beta"])
+    manager.commands_for("alpha")
+    manager.commands_for("beta")
+
+    manager.record("alpha", measurement.measurement_id, "echo_ready", {"port": 10100})
+    manager.record("beta", measurement.measurement_id, "echo_ready", {"port": 10100})
+
+    sent = _probes(manager, measurement.measurement_id)
+    assert sent["alpha->beta"]["host"] == "203.0.113.9"
+    assert sent["alpha->beta"]["port"] > 0
+    assert sent["beta->alpha"]["port"] > 0

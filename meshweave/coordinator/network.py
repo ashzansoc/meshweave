@@ -32,7 +32,13 @@ from meshweave.core import LinkMeasurement, LinkKind, TopologyMatrix
 
 # Ports a probe prefers to listen on. Stages prefer 10100/10200, so the probe
 # takes the next pair to avoid contending with a running deployment.
-PREFERRED_PROBE_PORTS = (10201, 10101)
+# A probe listens while a deployment may also be starting, and the stage runner
+# prefers 10100. Taking the other half of the pair avoids the race without
+# needing to know whether a stage is up.
+PREFERRED_PROBE_PORTS = (10200, 10201, 10101)
+# Ports a deployment uses. A probe may take them when no stage is running; they
+# are tried before the arbitrary low ports, which container images tend to occupy.
+STAGE_PORTS = (10100, 10200)
 
 
 def utcnow() -> datetime:
@@ -67,34 +73,38 @@ class NetworkMeasurement:
         return all(f"{a}->{b}" in self.results for a, b in self.expected_pairs())
 
 
-def choose_probe_port(inventory: Any) -> tuple[int, str] | None:
-    """Pick a published port to probe on, and the address peers should dial.
+def candidate_probe_ports(inventory: Any) -> list[int]:
+    """Published ports a probe may listen on, best first.
 
-    The process listens on the internal port; the peer dials the public address
-    and the provider's mapped port. Both come from what the node reported.
+    Only real TCP ports count: some providers report entries whose internal value
+    is not a port at all (Vast published 72299), and binding that raises
+    OverflowError on the node. The order matters because a container often has
+    its own services on the low ports, so the agent tries each in turn and reports
+    which one it got.
     """
     network = getattr(inventory, "network", None)
     if network is None:
-        return None
-    mapped = {int(k): int(v) for k, v in (network.mapped_ports or {}).items() if int(k) != 22}
+        return []
+
+    mapped = {}
+    for key, value in (network.mapped_ports or {}).items():
+        try:
+            internal, external = int(key), int(value)
+        except (TypeError, ValueError):
+            continue
+        if internal == 22 or not (1 <= internal <= 65535 and 1 <= external <= 65535):
+            continue
+        mapped[internal] = external
+
     if not mapped:
-        return None
+        return []
 
-    internal: int | None = None
-    for preferred in PREFERRED_PROBE_PORTS:
-        if preferred in mapped:
-            internal = preferred
-            break
-    if internal is None:
-        # Stay away from the ports a stage would choose if there is a choice.
-        off_limits = {10100, 10200}
-        usable = [port for port in mapped if port not in off_limits]
-        internal = max(usable or mapped)
-
-    host = network.external_ip or network.private_ip
-    if not host:
-        return None
-    return internal, f"{host}:{mapped[internal]}"
+    ordered: list[int] = []
+    for preferred in (*PREFERRED_PROBE_PORTS, *STAGE_PORTS):
+        if preferred in mapped and preferred not in ordered:
+            ordered.append(preferred)
+    ordered.extend(sorted(port for port in mapped if port not in ordered))
+    return ordered
 
 
 class NetworkProbeManager:
@@ -137,24 +147,27 @@ class NetworkProbeManager:
             record = self._resolve(node_id)
             if record is None or record.inventory is None:
                 return self._fail(measurement, f"{node_id} is not registered")
-            plan = choose_probe_port(record.inventory)
-            if plan is None:
+            ports = candidate_probe_ports(record.inventory)
+            if not ports:
                 return self._fail(
                     measurement,
                     f"{node_id} publishes no TCP port other than SSH, so another node "
                     "has no address to dial",
                 )
-            internal, address = plan
             measurement.echo[node_id] = {
-                "port": internal,
-                "address": address,
+                "ports": ports,
+                "port": ports[0],
+                "address": self._address_for(record, ports[0]),
                 "ready": False,
             }
             self._pending.setdefault(node_id, []).append(
                 {
                     "kind": "run_echo",
                     "measurement_id": measurement.measurement_id,
-                    "port": internal,
+                    # "port" is the first candidate, for agents that predate the
+                    # multi-candidate form; "ports" lets a newer agent fall back.
+                    "port": ports[0],
+                    "ports": ports,
                     "ttl_s": measurement.params["ttl_s"],
                 }
             )
@@ -194,6 +207,18 @@ class NetworkProbeManager:
             entry = measurement.echo.get(node_id)
             if entry is not None:
                 entry["ready"] = True
+                # The agent reports the port it actually bound and the address a
+                # peer must dial. The coordinator cannot know which candidate won.
+                if payload.get("port"):
+                    entry["port"] = int(payload["port"])
+                    if not entry.get("address"):
+                        # An older agent reports only the port. Resolve the address
+                        # from the inventory it heartbeated.
+                        record = self._resolve(node_id)
+                        if record is not None:
+                            entry["address"] = self._address_for(record, int(payload["port"]))
+                if payload.get("address"):
+                    entry["address"] = payload["address"]
             if all(info.get("ready") for info in measurement.echo.values()):
                 self._start_probes(measurement)
             return measurement
@@ -218,11 +243,31 @@ class NetworkProbeManager:
 
         return measurement
 
+    @staticmethod
+    def _address_for(record: Any, internal_port: int) -> str | None:
+        """Public address for a port this node listens on, from its inventory."""
+        network = getattr(record.inventory, "network", None)
+        if network is None:
+            return None
+        host = network.external_ip or network.private_ip
+        external = (network.mapped_ports or {}).get(internal_port)
+        if not host or external is None:
+            return None
+        return f"{host}:{external}"
+
     def _start_probes(self, measurement: NetworkMeasurement) -> None:
         measurement.phase = "probing"
         for source, target in measurement.expected_pairs():
             address = measurement.echo.get(target, {}).get("address")
             if not address:
+                # The peer never reported a reachable address; report it as a
+                # missing direction rather than probing nothing silently.
+                measurement.results[f"{source}->{target}"] = {
+                    "ok": False,
+                    "error": "peer reported no reachable address",
+                    "source": source,
+                    "target": target,
+                }
                 continue
             host, _, port = str(address).rpartition(":")
             self._pending.setdefault(source, []).append(

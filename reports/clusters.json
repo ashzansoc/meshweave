@@ -1,0 +1,15 @@
+{
+  "saved_at": "2026-11-18T14:19:18.070263+00:00",
+  "clusters": [
+    {
+      "cluster_id": "F16-VDC-001",
+      "name": "VDC-001",
+      "node_ids": [
+        "gpu-node-1",
+        "brisk-thistle-9ae2"
+      ],
+      "created_at": "2026-11-18T14:19:18.070249+00:00",
+      "warnings": []
+    }
+  ]
+}

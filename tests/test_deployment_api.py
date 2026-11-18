@@ -231,3 +231,41 @@ def test_stopping_a_deployment_is_not_undone_by_a_status_report(client: TestClie
     ).json()
     kinds = [c["kind"] for c in work["deployment_commands"]]
     assert "run_stage" not in kinds
+
+
+def test_execution_evidence_survives_the_result_endpoint(client: TestClient) -> None:
+    """The runner measures the pipeline round trip, the activation bytes and the
+    GPU during generation. If the request model drops them, a distributed request
+    reports nothing about what it actually did."""
+    state = client.app.state.mw
+    record = node("solo", mapped={10100: 41000})
+    state.registry.register(record.registration)
+    state.registry.get("solo").inventory = record.inventory
+
+    created = client.post(
+        "/v1/deployments", json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["solo"]}
+    ).json()
+
+    response = client.post(
+        f"/v1/deployments/{created['deployment_id']}/result",
+        json={
+            "prompt": "hi",
+            "text": "hello",
+            "output_tokens": 4,
+            "prompt_id": "p-1",
+            "stage_roundtrip_ms": 452.3,
+            "activation_bytes_per_token": 1792.0,
+            "activation_bytes_sent": 7168,
+            "world": 2,
+            "rank": 0,
+            "gpu_during_generation": {"samples": 12, "util_pct_max": 97.0},
+        },
+    )
+    assert response.status_code == 200
+
+    detail = client.get(f"/v1/deployments/{created['deployment_id']}").json()
+    result = detail["results"][-1]
+    assert result["stage_roundtrip_ms"] == 452.3
+    assert result["activation_bytes_per_token"] == 1792.0
+    assert result["world"] == 2
+    assert result["gpu_during_generation"]["util_pct_max"] == 97.0

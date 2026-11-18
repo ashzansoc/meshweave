@@ -105,7 +105,12 @@ class DenseConfig:
             eps=float(raw.get("rms_norm_eps", 1e-6)),
             rope_theta=rope_theta,
             tie_embeddings=bool(raw.get("tie_word_embeddings", False)),
-            attn_bias=bool(raw.get("attention_bias", False)),
+            # Qwen2 always carries q/k/v biases, and the published config.json
+            # omits the key entirely -- Qwen/Qwen2.5-0.5B-Instruct's config has
+            # no attention_bias field, while its checkpoint has q_proj.bias,
+            # k_proj.bias and v_proj.bias. Defaulting this to False computed
+            # attention without them and produced fluent-looking gibberish.
+            attn_bias=bool(raw.get("attention_bias", True)),
             dtype=str(raw.get("torch_dtype") or raw.get("dtype") or "bfloat16"),
         )
 
