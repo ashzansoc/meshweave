@@ -1187,8 +1187,9 @@ def _prompt_worker(coord: Coordinator, deployment_id: str, command: dict) -> Non
             "prompt_id": command.get("prompt_id"),
             "error": f"{type(exc).__name__}: {exc}",
         }
-    if "error" in result:
-        result["node_id"] = coord.node_id
+    # Always attribute the result to this node. Routing counts in-flight work per
+    # node, so a result without an owner leaves that node permanently "busy".
+    result["node_id"] = coord.node_id
     try:
         coord.report_result(deployment_id, result)
     except RuntimeError as exc:

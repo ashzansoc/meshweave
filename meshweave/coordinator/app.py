@@ -844,8 +844,19 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             # rather than replacing it with the shutdown notice.
             return _summarise(deployment)
 
+        phase = report.phase
+        detail = report.detail or ""
+        # The agent infers a stage's phase from its log, looking for the word
+        # "ready". Runners before 0.4.2 do not print that marker for a
+        # single-stage process, so a loaded and listening stage reported itself as
+        # still loading forever. The listener line is the real evidence.
+        if phase == "loading" and (
+            "listening on" in detail or "control socket" in detail
+        ):
+            phase = "running"
+
         entry = {
-            "phase": report.phase,
+            "phase": phase,
             "detail": report.detail,
             "pid": report.pid,
             "at": utcnow().isoformat(),
@@ -911,7 +922,19 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         payload["at"] = utcnow().isoformat()
         deployment.results.append(payload)
         if deployment.mode == "REPLICA":
+            # Prefer the node that reported; fall back to the node the prompt
+            # was assigned to, so a result that omits its origin still releases
+            # the load it was counted against.
             node_id = payload.get("node_id")
+            if not node_id:
+                node_id = next(
+                    (
+                        p.get("assigned_node")
+                        for p in deployment.prompts
+                        if p.get("id") == payload.get("prompt_id")
+                    ),
+                    None,
+                )
             if node_id and deployment.replica_load.get(node_id):
                 deployment.replica_load[node_id] -= 1
         for prompt in deployment.prompts:

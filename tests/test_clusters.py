@@ -311,3 +311,68 @@ def test_a_replica_is_skipped_when_it_is_not_running(client: TestClient) -> None
     assert response.status_code == 200
     detail = client.get(f"/v1/deployments/{deployment_id}").json()
     assert detail["replica_load"] == {"alpha": 1}
+
+
+def test_a_result_releases_the_replica_it_ran_on(client: TestClient) -> None:
+    """Routing counts in-flight work per node; a result must give it back."""
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    ).json()
+    deployment_id = created["deployment_id"]
+    for node_id in ("alpha", "beta"):
+        client.post(
+            f"/v1/deployments/{deployment_id}/nodes/{node_id}/status",
+            json={"phase": "running"},
+        )
+
+    queued = client.post(
+        f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "x"}
+    ).json()
+    detail = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert sum(detail["replica_load"].values()) == 1
+
+    client.post(
+        f"/v1/deployments/{deployment_id}/result",
+        json={
+            "prompt": "x",
+            "text": "y",
+            "output_tokens": 2,
+            "prompt_id": queued["prompt_id"],
+            "node_id": "alpha",
+        },
+    )
+    detail = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert sum(detail["replica_load"].values()) == 0
+
+
+def test_a_result_without_a_node_still_releases_the_assignment(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    ).json()
+    deployment_id = created["deployment_id"]
+    for node_id in ("alpha", "beta"):
+        client.post(
+            f"/v1/deployments/{deployment_id}/nodes/{node_id}/status",
+            json={"phase": "running"},
+        )
+    queued = client.post(
+        f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "x"}
+    ).json()
+
+    # The agent omits its identity; the coordinator must still release the load.
+    client.post(
+        f"/v1/deployments/{deployment_id}/result",
+        json={"prompt": "x", "text": "y", "output_tokens": 2, "prompt_id": queued["prompt_id"]},
+    )
+    detail = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert sum(detail["replica_load"].values()) == 0
