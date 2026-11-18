@@ -75,11 +75,25 @@ PY
   die "could not install Parallax"
 fi
 
-VERSION="$("$VENV/bin/python" -c 'import parallax, sys; print(getattr(parallax, "__version__", "unknown"))' 2>/dev/null || echo unknown)"
+VERSION="$("$VENV/bin/python" -c 'from importlib.metadata import version; print(version("parallax"))' 2>/dev/null || echo "unknown (import failed)")"
 log "installed Parallax $VERSION"
+if ! "$VENV/bin/parallax" --help >/dev/null 2>&1; then
+  warn "the 'parallax' command is not usable in the venv"
+fi
 
 # ── 3. Start a single node ────────────────────────────────────────────────
 # Single node only: no --join, no published peer ports, no scheduler.
+if [ -f "$ROOT/parallax.pid" ]; then
+  old_pid="$(cat "$ROOT/parallax.pid" 2>/dev/null || true)"
+  if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null \
+     && tr '\0' ' ' < "/proc/$old_pid/cmdline" 2>/dev/null | grep -q "parallax"; then
+    log "stopping the previous server (pid $old_pid)"
+    kill -TERM "$old_pid" 2>/dev/null || true
+    sleep 2
+  fi
+  rm -f "$ROOT/parallax.pid"
+fi
+
 cd "$ROOT"
 set +e
 "$VENV/bin/parallax" serve -m "$MODEL" --dtype float16 --host 127.0.0.1 --port "$PORT" \
@@ -153,9 +167,26 @@ print(json.dumps({k: result[k] for k in ("ok", "server_ready", "text") if k in r
 PY
 
 log "result written to $RESULT"
+
 if grep -q '"ok": true' "$RESULT" 2>/dev/null; then
   log "SPIKE PASSED: Parallax runs this model on this GPU"
 else
-  warn "SPIKE FAILED or inconclusive; see $RESULT and $ROOT/server.log"
+  warn "SPIKE FAILED or inconclusive"
+  "$VENV/bin/python" - "$RESULT" <<'SPIKE_PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+if d.get("error"):
+    print("  error:")
+    for line in str(d["error"]).splitlines()[:12]:
+        print("   ", line)
+if d.get("server_log_tail"):
+    print("  server log (last lines):")
+    for line in str(d["server_log_tail"]).splitlines()[-12:]:
+        print("   ", line)
+SPIKE_PY
 fi
-warn "the server is still running; stop it with: sudo bash $0 --uninstall"
+
+if [ -f "$ROOT/parallax.pid" ]; then
+  warn "the server is still running; stop it with: sudo kill $(cat "$ROOT/parallax.pid")"
+fi
+warn "remove everything with: sudo rm -rf $ROOT $RESULT"
