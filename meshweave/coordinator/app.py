@@ -34,6 +34,7 @@ from meshweave.coordinator.deployments import (
     ModelConfigUnavailable,
     fetch_model_config,
     DeploymentStore,
+    effective_dtype,
     load_remote_config,
     new_deployment,
     normalise_repo,
@@ -594,7 +595,8 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         except DeploymentRejected as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-        deployment = new_deployment(repo, stages, config, request.max_seq)
+        dtype = effective_dtype(config, records)
+        deployment = new_deployment(repo, stages, config, request.max_seq, dtype=dtype)
         state.deployments.add(deployment)
         state.workloads.event(
             f"dep:{deployment.deployment_id}",

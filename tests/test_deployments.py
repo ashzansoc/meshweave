@@ -292,3 +292,18 @@ def test_the_version_comparison_is_numeric_not_lexical() -> None:
     assert agent_can_deploy("1.0.0")
     assert not agent_can_deploy("0.2.9")
     assert not agent_can_deploy(None)
+
+
+def test_turing_cards_get_float16_instead_of_bfloat16() -> None:
+    """bf16 needs compute 8.0; a 2070 SUPER is 7.5 and would fail at the first op."""
+    from meshweave.coordinator.deployments import effective_dtype
+
+    config = DenseConfig.from_json(QWEN_05B)
+    turing = node("turing", mapped={10100: 41000})
+    turing.inventory.gpus[0].compute_capability = (7, 5)
+    ampere = node("ampere", mapped={10100: 42000})
+    ampere.inventory.gpus[0].compute_capability = (8, 6)
+
+    assert effective_dtype(config, [turing]) == "float16"
+    assert effective_dtype(config, [ampere]) == "bfloat16"
+    assert effective_dtype(config, [ampere, turing]) == "float16"

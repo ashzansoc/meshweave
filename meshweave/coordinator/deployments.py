@@ -398,8 +398,32 @@ def plan_deployment(
     return stages
 
 
+def effective_dtype(config: DenseConfig, records: list[Any]) -> str:
+    """Pick a dtype the chosen cards can actually execute.
+
+    bfloat16 needs Ampere (compute 8.0). On a Turing card the planner switches to
+    float16 rather than starting a stage that fails at the first kernel. Both are
+    two bytes, so the memory arithmetic is unchanged -- only the label differs.
+    """
+    if config.dtype != "bfloat16":
+        return config.dtype
+    for record in records:
+        inventory = record.inventory
+        if inventory is None:
+            continue
+        for gpu in inventory.gpus:
+            capability = gpu.compute_capability
+            if capability and tuple(int(part) for part in capability) < (8, 0):
+                return "float16"
+    return config.dtype
+
+
 def new_deployment(
-    model: str, stages: list[StagePlan], config: DenseConfig, max_seq: int
+    model: str,
+    stages: list[StagePlan],
+    config: DenseConfig,
+    max_seq: int,
+    dtype: str | None = None,
 ) -> Deployment:
     return Deployment(
         deployment_id=f"dep-{secrets.token_hex(6)}",
@@ -407,7 +431,7 @@ def new_deployment(
         status="DISPATCHED",
         stages=stages,
         config={
-            "dtype": config.dtype,
+            "dtype": dtype or config.dtype,
             "max_seq": max_seq,
             "architecture": config.architecture,
             "layers": config.layers,

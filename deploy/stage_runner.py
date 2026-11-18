@@ -98,7 +98,18 @@ def ensure_model(repo: str, cache_dir: Path) -> Path:
 
 
 def build_stage(args: argparse.Namespace, config: DenseConfig) -> tuple[DenseStage, int]:
-    dtype = DTYPES[args.dtype]
+    dtype_name = args.dtype
+    if (
+        dtype_name == "bfloat16"
+        and args.device == "cuda"
+        and torch.cuda.is_available()
+        and not torch.cuda.is_bf16_supported()
+    ):
+        # Turing and older have no bf16 kernels. The planner should have picked
+        # fp16 already; this is the last line of defence so the stage starts.
+        dtype_name = "float16"
+        log(f"bfloat16 is not supported on this GPU; using {dtype_name}")
+    dtype = DTYPES[dtype_name]
     if args.device == "cuda" and not torch.cuda.is_available():
         raise SystemExit("--device cuda was requested but CUDA is not available")
 
@@ -121,7 +132,7 @@ def build_stage(args: argparse.Namespace, config: DenseConfig) -> tuple[DenseSta
     resident = stage_weights.bytes
     log(
         f"rank {args.rank}/{args.world}: layers [{args.start},{args.end}) "
-        f"on {args.device} in {args.dtype}, {resident / 1024**2:.1f} MiB resident"
+        f"on {args.device} in {dtype_name}, {resident / 1024**2:.1f} MiB resident"
     )
     if device.type == "cuda":
         allocated = torch.cuda.memory_allocated(device)

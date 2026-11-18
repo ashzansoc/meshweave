@@ -177,6 +177,10 @@ def gpu_inventory() -> list[dict]:
             util = opt(pynvml.nvmlDeviceGetUtilizationRates)
             power = opt(pynvml.nvmlDeviceGetPowerUsage)
             temp = opt(pynvml.nvmlDeviceGetTemperature)
+            capability = opt(pynvml.nvmlDeviceGetCudaComputeCapability)
+            driver = opt(pynvml.nvmlSystemGetDriverVersion)
+            if isinstance(driver, bytes):
+                driver = driver.decode()
 
             gpus.append(
                 {
@@ -190,6 +194,13 @@ def gpu_inventory() -> list[dict]:
                     "power_draw_w": (float(power) / 1000.0) if power is not None else None,
                     "utilization_gpu_pct": float(util.gpu) if util else None,
                     "utilization_memory_pct": float(util.memory) if util else None,
+                    # bf16 needs Ampere (8.0). Turing cards report 7.5 and run
+                    # bf16 kernels emulated or not at all, so the planner needs
+                    # this to choose fp16 instead of guessing from the model name.
+                    "compute_capability": (
+                        [int(capability[0]), int(capability[1])] if capability else None
+                    ),
+                    "driver_version": str(driver) if driver else None,
                 }
             )
         return gpus
