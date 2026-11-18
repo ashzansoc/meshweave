@@ -7,6 +7,7 @@ import { Workloads } from './views/Workloads'
 import { Experiments } from './views/Experiments'
 import { Economics } from './views/Economics'
 import { Network } from './views/Network'
+import { Deploy } from './views/Deploy'
 import { Readiness } from './views/Readiness'
 import { usePolling } from './lib/api'
 import { timeAgo } from './lib/format'
@@ -23,6 +24,7 @@ const NAV = [
   { to: '/', label: 'Overview', end: true },
   { to: '/nodes', label: 'Nodes' },
   { to: '/readiness', label: 'Readiness' },
+  { to: '/deploy', label: 'Deploy' },
   { to: '/topology', label: 'Topology' },
   { to: '/network', label: 'Network' },
   { to: '/planner', label: 'Planner' },
@@ -147,6 +149,7 @@ export default function App() {
               <Route path="/" element={<Overview />} />
               <Route path="/nodes" element={<Nodes />} />
               <Route path="/readiness" element={<Readiness />} />
+              <Route path="/deploy" element={<Deploy />} />
               <Route path="/topology" element={<Topology />} />
               <Route path="/network" element={<Network />} />
               <Route path="/planner" element={<Planner />} />

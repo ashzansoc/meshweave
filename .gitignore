@@ -38,3 +38,5 @@ dashboard/node_modules/
 # Live coordinator state. Contains real node addresses and identity, which must
 # not be published just because the runtime happens to write it into the repo.
 reports/registry_snapshot.json
+# Live deployment state, same reason as the registry snapshot.
+reports/deployments.json

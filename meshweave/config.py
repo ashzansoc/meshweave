@@ -26,6 +26,9 @@ class CoordinatorSettings(BaseSettings):
     database_url: str = "sqlite:///./reports/meshweave.sqlite3"
     heartbeat_timeout_s: float = 15.0
     heartbeat_grace_s: float = 30.0
+    # Where deployments are remembered. Separate from the registry snapshot so
+    # that tests, and a second coordinator, do not share one file.
+    deployments_file: Path = Path("./reports/deployments.json")
 
     # Open enrollment. When set, an agent presenting this shared token may
     # register itself without a coordinator-issued credential. This is what makes

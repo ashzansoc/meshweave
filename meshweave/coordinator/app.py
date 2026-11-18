@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from meshweave import __version__
 from meshweave.communication.auth import (
@@ -26,6 +27,18 @@ from meshweave.communication.auth import (
     load_or_create_secret,
 )
 from meshweave.config import CoordinatorSettings
+from meshweave.coordinator.deployments import (
+    GIB,
+    Deployment,
+    DeploymentRejected,
+    ModelConfigUnavailable,
+    fetch_model_config,
+    DeploymentStore,
+    load_remote_config,
+    new_deployment,
+    normalise_repo,
+    plan_deployment,
+)
 from meshweave.core import (
     ExecutionRecord,
     Heartbeat,
@@ -48,6 +61,7 @@ logger = logging.getLogger("meshweave.coordinator")
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 SECRET_PATH = "./reports/.coordinator_secret"
+
 
 
 class WorkloadManager:
@@ -93,6 +107,50 @@ class WorkloadManager:
         return self._events.get(workload_id, [])
 
 
+
+# --------------------------------------------------------------------------- #
+# deployment request bodies
+#
+# Declared at module scope on purpose. Inside create_app() the annotations are
+# strings (from __future__ import annotations) that FastAPI cannot resolve
+# against module globals, so it silently treats the body as a query parameter
+# and every request fails with a 422 about a missing "request" field.
+# --------------------------------------------------------------------------- #
+
+
+class DeploymentRequest(BaseModel):
+    model: str
+    node_ids: list[str] = Field(default_factory=list)
+    max_seq: int = 2048
+
+
+class DeploymentStatusReport(BaseModel):
+    phase: str
+    detail: str | None = None
+    pid: int | None = None
+
+
+class DeploymentResult(BaseModel):
+    prompt: str = ""
+    text: str | None = None
+    prompt_tokens: int = 0
+    output_tokens: int = 0
+    ttft_ms: float | None = None
+    ms_per_token: float | None = None
+    tokens_per_second: float | None = None
+    total_s: float | None = None
+    error: str | None = None
+    node_id: str | None = None
+    prompt_id: str | None = None
+
+
+class PromptRequest(BaseModel):
+    prompt: str
+    max_new_tokens: int = 32
+    temperature: float = 0.0
+    top_p: float = 1.0
+
+
 class CoordinatorState:
     def __init__(self, settings: CoordinatorSettings) -> None:
         self.settings = settings
@@ -102,6 +160,7 @@ class CoordinatorState:
         self.topology: TopologyMatrix | None = None
         self.graph: TopologyGraph | None = None
         self.secret = load_or_create_secret(SECRET_PATH)
+        self.deployments = DeploymentStore(Path(settings.deployments_file))
         self._agent_clients: dict[str, Any] = {}
         self._reaper: asyncio.Task[None] | None = None
 
@@ -448,8 +507,203 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         return {
             "node_id": node_id,
             "commands": [a.model_dump(mode="json") for a in pending],
+            # Stages and prompts for the deployments this node takes part in.
+            # The agent acts on run_stage, stop_stage and run_prompt only.
+            "deployment_commands": state.deployments.commands_for(node_id),
             "heartbeat_interval_s": state.settings.heartbeat_timeout_s / 3.0,
         }
+
+    # -- deployments -----------------------------------------------------
+    #
+    # A deployment is a model plus a chosen set of nodes, each running one stage
+    # that holds a contiguous range of layers. The coordinator plans it, refuses
+    # it with a reason when it cannot physically work, and then hands the stages
+    # to the agents through the work queue. It never runs anything itself.
+
+    async def _fetch_model_config(repo: str) -> str:
+        """Read config.json from the hub. Planning needs the real geometry."""
+        try:
+            return await fetch_model_config(repo)
+        except ModelConfigUnavailable as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    def _deployment_or_404(deployment_id: str) -> Deployment:
+        deployment = state.deployments.get(deployment_id)
+        if deployment is None:
+            raise HTTPException(status_code=404, detail="unknown deployment")
+        return deployment
+
+    def _summarise(deployment: Deployment) -> dict[str, Any]:
+        nodes = [s.node_id for s in deployment.stages]
+        phases = [deployment.node_status.get(n, {}).get("phase", "pending") for n in nodes]
+        return {
+            "deployment_id": deployment.deployment_id,
+            "model": deployment.model,
+            "status": deployment.status,
+            "message": deployment.message,
+            "created_at": deployment.created_at,
+            "strategy": deployment.config.get("strategy"),
+            "dtype": deployment.config.get("dtype"),
+            "layers": deployment.config.get("layers"),
+            "stages": [
+                {
+                    "node_id": stage.node_id,
+                    "rank": stage.rank,
+                    "layers": stage.layers,
+                    "count": stage.end - stage.start,
+                    "resident_gib": round(stage.resident_bytes / GIB, 3),
+                    "checkpoint_gib": round(stage.checkpoint_bytes / GIB, 2),
+                    "address": stage.address,
+                    "phase": deployment.node_status.get(stage.node_id, {}).get("phase", "pending"),
+                    "detail": deployment.node_status.get(stage.node_id, {}).get("detail"),
+                    "vram_used_gib": deployment.node_status.get(stage.node_id, {}).get(
+                        "vram_used_gib"
+                    ),
+                }
+                for stage in deployment.stages
+            ],
+            "phases": phases,
+            "results": deployment.results[-10:],
+            "pending_prompts": sum(1 for p in deployment.prompts if p.get("state") != "done"),
+        }
+
+    @app.post("/v1/deployments")
+    async def create_deployment(request: DeploymentRequest) -> dict[str, Any]:
+        try:
+            repo = normalise_repo(request.model)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        records = []
+        for node_id in request.node_ids:
+            record = state.registry.get(node_id)
+            if record is None:
+                raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
+            records.append(record)
+
+        raw_config = await _fetch_model_config(repo)
+        try:
+            config = load_remote_config(raw_config)
+        except Exception as exc:  # noqa: BLE001 - the reason matters more than the type
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        try:
+            stages = plan_deployment(
+                model=repo, records=records, config=config, max_seq=request.max_seq
+            )
+        except DeploymentRejected as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        deployment = new_deployment(repo, stages, config, request.max_seq)
+        state.deployments.add(deployment)
+        state.workloads.event(
+            f"dep:{deployment.deployment_id}",
+            "created",
+            {"model": repo, "nodes": [s.node_id for s in stages]},
+        )
+        return _summarise(deployment)
+
+    @app.get("/v1/deployments")
+    async def list_deployments() -> dict[str, Any]:
+        return {"deployments": [_summarise(d) for d in state.deployments.all()]}
+
+    @app.get("/v1/deployments/{deployment_id}")
+    async def get_deployment(deployment_id: str) -> dict[str, Any]:
+        return _summarise(_deployment_or_404(deployment_id))
+
+    @app.post("/v1/deployments/{deployment_id}/nodes/{node_id}/status")
+    async def report_node_status(
+        deployment_id: str, node_id: str, report: DeploymentStatusReport
+    ) -> dict[str, Any]:
+        deployment = _deployment_or_404(deployment_id)
+        if state.deployments.stage_for(deployment_id, node_id) is None:
+            raise HTTPException(status_code=404, detail=f"{node_id} has no stage here")
+
+        entry = {
+            "phase": report.phase,
+            "detail": report.detail,
+            "pid": report.pid,
+            "at": utcnow().isoformat(),
+        }
+        deployment.node_status[node_id] = entry
+
+        phases = [
+            deployment.node_status.get(stage.node_id, {}).get("phase", "pending")
+            for stage in deployment.stages
+        ]
+        if "failed" in phases:
+            deployment.status = "FAILED"
+            deployment.message = next(
+                (
+                    deployment.node_status[s.node_id].get("detail")
+                    for s in deployment.stages
+                    if deployment.node_status.get(s.node_id, {}).get("phase") == "failed"
+                ),
+                None,
+            )
+        elif all(p == "running" for p in phases):
+            deployment.status = "RUNNING"
+        elif any(p in ("loading", "starting", "running") for p in phases):
+            deployment.status = "LOADING"
+        state.deployments.touch(deployment)
+        return _summarise(deployment)
+
+    @app.post("/v1/deployments/{deployment_id}/result")
+    async def report_result(deployment_id: str, result: DeploymentResult) -> dict[str, Any]:
+        deployment = _deployment_or_404(deployment_id)
+        payload = result.model_dump()
+        payload["at"] = utcnow().isoformat()
+        deployment.results.append(payload)
+        for prompt in deployment.prompts:
+            if prompt.get("id") == result.prompt_id:
+                prompt["state"] = "done"
+        if result.error:
+            deployment.message = result.error
+        state.deployments.touch(deployment)
+        return {"recorded": True, "results": len(deployment.results)}
+
+    @app.post("/v1/deployments/{deployment_id}/prompt")
+    async def submit_prompt(deployment_id: str, request: PromptRequest) -> dict[str, Any]:
+        deployment = _deployment_or_404(deployment_id)
+        if deployment.status not in ("RUNNING", "LOADING"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"deployment is {deployment.status}; wait until every stage reports "
+                    "running before sending prompts"
+                ),
+            )
+        prompt_id = f"p-{secrets.token_hex(4)}"
+        deployment.prompts.append(
+            {
+                "id": prompt_id,
+                "prompt": request.prompt,
+                "max_new_tokens": request.max_new_tokens,
+                "temperature": request.temperature,
+                "top_p": request.top_p,
+                "state": "queued",
+                "at": utcnow().isoformat(),
+            }
+        )
+        state.deployments.touch(deployment)
+        return {"prompt_id": prompt_id, "queued": True}
+
+    @app.post("/v1/deployments/{deployment_id}/stop")
+    async def stop_deployment(deployment_id: str) -> dict[str, Any]:
+        deployment = _deployment_or_404(deployment_id)
+        deployment.stop_requested = True
+        deployment.status = "STOPPED"
+        deployment.message = "stop requested"
+        state.deployments.touch(deployment)
+        return _summarise(deployment)
+
+    @app.delete("/v1/deployments/{deployment_id}")
+    async def forget_deployment(deployment_id: str) -> dict[str, Any]:
+        deployment = _deployment_or_404(deployment_id)
+        deployment.stop_requested = True
+        state.deployments.touch(deployment)
+        removed = state.deployments.remove(deployment_id)
+        return {"deployment_id": deployment_id, "removed": removed}
 
     # -- metrics / evidence ---------------------------------------------
 

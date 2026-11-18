@@ -38,8 +38,11 @@ import platform
 import secrets
 import shutil
 import socket
+import signal
 import ssl
+import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -364,6 +367,306 @@ class Coordinator:
     def poll(self) -> dict:
         return self._request("GET", f"/v1/agents/{self.node_id}/work")
 
+    def report_stage(
+        self, deployment_id: str, phase: str, detail: str | None, pid: int | None
+    ) -> None:
+        self._request(
+            "POST",
+            f"/v1/deployments/{deployment_id}/nodes/{self.node_id}/status",
+            {"phase": phase, "detail": detail, "pid": pid},
+        )
+
+    def report_result(self, deployment_id: str, result: dict) -> None:
+        self._request("POST", f"/v1/deployments/{deployment_id}/result", result)
+
+
+# --------------------------------------------------------------------------- #
+# stage supervision
+#
+# The agent starts and stops stage processes it launched itself. Nothing else is
+# ever signalled: before a pid is terminated its /proc cmdline is checked for
+# stage_runner.py, so a recycled pid cannot be mistaken for ours.
+# --------------------------------------------------------------------------- #
+
+STAGE_DIR = Path(os.environ.get("MESHWEAVE_STAGE_DIR", "/opt/meshweave"))
+STATE_DIR = Path(os.environ.get("MESHWEAVE_STATE_DIR", "/var/lib/meshweave"))
+STAGE_STATE = STATE_DIR / "stages.json"
+CONTROL_SOCKET = Path(os.environ.get("MESHWEAVE_CONTROL_SOCKET", "/run/meshweave/control.sock"))
+LOG_DIR = Path(os.environ.get("MESHWEAVE_LOG_DIR", "/var/log"))
+
+
+def _read_stage_state() -> dict:
+    try:
+        return json.loads(STAGE_STATE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_stage_state(state: dict) -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = STAGE_STATE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.replace(STAGE_STATE)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _cmdline(pid: int) -> str:
+    try:
+        return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(
+            errors="replace"
+        )
+    except OSError:
+        return ""
+
+
+def _tail(path: Path, limit: int = 400) -> str:
+    try:
+        text = path.read_text(errors="replace")
+    except OSError:
+        return ""
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    return lines[-1][:limit] if lines else ""
+
+
+def stage_phase(entry: dict) -> tuple[str, str | None]:
+    """Infer what a stage process is doing from its liveness and its own log.
+
+    There is no status channel into the runner beyond the lines it prints, and
+    that is deliberate: the agent supervises a process, it does not instrument
+    it. A ready line means the pipeline handshakes completed.
+    """
+    pid = int(entry["pid"])
+    log_path = Path(entry["log"])
+    if not _alive(pid):
+        return "failed", _tail(log_path) or "stage process exited"
+    log = ""
+    try:
+        log = log_path.read_text(errors="replace")[-4000:]
+    except OSError:
+        pass
+    if "ready" in log:
+        return "running", None
+    if "Traceback" in log:
+        return "failed", _tail(log_path)
+    return "loading", _tail(log_path) or None
+
+
+def start_stage(command: dict) -> dict:
+    deployment_id = str(command["deployment_id"])
+    state = _read_stage_state()
+    existing = state.get(deployment_id)
+    if existing and _alive(int(existing["pid"])) and "stage_runner.py" in _cmdline(
+        int(existing["pid"])
+    ):
+        phase, detail = stage_phase(existing)
+        return {"phase": phase, "detail": detail, "pid": int(existing["pid"])}
+
+    runner = STAGE_DIR / "stage_runner.py"
+    if not runner.exists():
+        return {"phase": "failed", "detail": f"{runner} is missing", "pid": None}
+
+    argv = [
+        sys.executable,
+        str(runner),
+        "--repo",
+        str(command["repo"]),
+        "--rank",
+        str(command["rank"]),
+        "--world",
+        str(command["world"]),
+        "--start",
+        str(command["start"]),
+        "--end",
+        str(command["end"]),
+        "--device",
+        str(command.get("device") or "cuda"),
+        "--dtype",
+        str(command.get("dtype") or "bfloat16"),
+        "--max-seq",
+        str(command.get("max_seq") or 2048),
+        "--control",
+        str(CONTROL_SOCKET),
+    ]
+    for flag, key in (("--listen", "listen"), ("--next", "next"), ("--reply", "reply")):
+        value = command.get(key)
+        if value:
+            argv += [flag, str(value)]
+
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOG_DIR / f"meshweave-stage-{deployment_id}.log"
+    handle = log_path.open("a")
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            cwd=str(STAGE_DIR),
+            start_new_session=True,
+            env={**os.environ, "PYTHONPATH": str(STAGE_DIR)},
+        )
+    except OSError as exc:
+        handle.close()
+        return {"phase": "failed", "detail": f"could not start stage: {exc}", "pid": None}
+    finally:
+        handle.close()
+
+    state[deployment_id] = {
+        "pid": proc.pid,
+        "log": str(log_path),
+        "started_at": utcnow(),
+        "model": command.get("repo"),
+        "rank": command.get("rank"),
+    }
+    _write_stage_state(state)
+    print(
+        f"started stage {command.get('rank')} for {deployment_id} as pid {proc.pid}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return {"phase": "starting", "detail": "stage process launched", "pid": proc.pid}
+
+
+def stop_stage(deployment_id: str) -> dict:
+    state = _read_stage_state()
+    entry = state.get(deployment_id)
+    if not entry:
+        return {"phase": "stopped", "detail": "no stage recorded", "pid": None}
+
+    pid = int(entry["pid"])
+    if "stage_runner.py" not in _cmdline(pid):
+        # The pid is gone or has been reused by something else. Drop the record
+        # instead of signalling a process that is not ours.
+        state.pop(deployment_id, None)
+        _write_stage_state(state)
+        return {"phase": "stopped", "detail": "stage already gone", "pid": None}
+
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.monotonic() + 15.0
+    while time.monotonic() < deadline:
+        if not _alive(pid):
+            break
+        time.sleep(0.3)
+    if _alive(pid):
+        os.kill(pid, signal.SIGKILL)
+
+    state.pop(deployment_id, None)
+    _write_stage_state(state)
+    return {"phase": "stopped", "detail": "stage terminated", "pid": None}
+
+
+def run_prompt(command: dict) -> dict:
+    """Send one prompt to the local control socket and wait for the answer."""
+    control = Path(command.get("control") or CONTROL_SOCKET)
+    request = {
+        "prompt": command["prompt"],
+        "max_new_tokens": command.get("max_new_tokens", 32),
+        "temperature": command.get("temperature", 0.0),
+        "top_p": command.get("top_p", 1.0),
+    }
+    deadline = time.monotonic() + float(command.get("timeout_s", 600))
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+        sock.settimeout(30.0)
+        while True:
+            try:
+                sock.connect(str(control))
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    return {
+                        "prompt_id": command.get("prompt_id"),
+                        "error": f"control socket {control} not available",
+                    }
+                time.sleep(1.0)
+        sock.sendall((json.dumps(request) + "\n").encode())
+        buffer = b""
+        sock.settimeout(float(command.get("timeout_s", 600)))
+        while b"\n" not in buffer:
+            chunk = sock.recv(65536)
+            if not chunk:
+                return {
+                    "prompt_id": command.get("prompt_id"),
+                    "error": "stage closed the control socket",
+                }
+            buffer += chunk
+
+    payload = json.loads(buffer.split(b"\n")[0])
+    if not payload.get("ok"):
+        return {
+            "prompt_id": command.get("prompt_id"),
+            "error": str(payload.get("error")),
+        }
+    result = dict(payload["result"])
+    result["prompt_id"] = command.get("prompt_id")
+    return result
+
+
+def handle_deployment_commands(coord: Coordinator, commands: list[dict]) -> None:
+    """Act on the closed set of deployment commands, and report every outcome."""
+    for command in commands or []:
+        kind = command.get("kind")
+        deployment_id = str(command.get("deployment_id", ""))
+        if not deployment_id:
+            continue
+        try:
+            if kind == "run_stage":
+                outcome = start_stage(command)
+                coord.report_stage(
+                    deployment_id, outcome["phase"], outcome.get("detail"), outcome.get("pid")
+                )
+            elif kind == "stop_stage":
+                outcome = stop_stage(deployment_id)
+                coord.report_stage(deployment_id, "stopped", "stage stopped", None)
+            elif kind == "run_prompt":
+                # Generation can take minutes on these links. Running it inline
+                # would stall heartbeats, and the coordinator would declare the
+                # node unreachable while it was busy doing exactly what it was
+                # asked to do.
+                threading.Thread(
+                    target=_prompt_worker,
+                    args=(coord, deployment_id, command),
+                    daemon=True,
+                ).start()
+            else:
+                # Unknown kinds are ignored, never executed as a shell string.
+                print(f"ignoring unknown command {kind!r}", file=sys.stderr, flush=True)
+        except RuntimeError as exc:
+            print(f"{kind} failed: {exc}", file=sys.stderr, flush=True)
+
+
+def _prompt_worker(coord: Coordinator, deployment_id: str, command: dict) -> None:
+    """Run one prompt off the main loop and report whatever happened."""
+    try:
+        result = run_prompt(command)
+    except Exception as exc:  # noqa: BLE001 - reported, never lost
+        result = {
+            "prompt_id": command.get("prompt_id"),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    if "error" in result:
+        result["node_id"] = coord.node_id
+    try:
+        coord.report_result(deployment_id, result)
+    except RuntimeError as exc:
+        print(f"could not report prompt result: {exc}", file=sys.stderr, flush=True)
+
+
+def refresh_stage_status(coord: Coordinator) -> None:
+    """Keep the coordinator's view of each stage current."""
+    for deployment_id, entry in _read_stage_state().items():
+        phase, detail = stage_phase(entry)
+        try:
+            coord.report_stage(deployment_id, phase, detail, int(entry["pid"]))
+        except RuntimeError as exc:
+            print(f"stage status report failed: {exc}", file=sys.stderr, flush=True)
+
 
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
@@ -455,6 +758,15 @@ def main() -> int:
                     print(f"re-registered {node_id}", file=sys.stderr, flush=True)
                 except RuntimeError as reg_exc:
                     print(f"re-register failed: {reg_exc}", file=sys.stderr, flush=True)
+
+        # What the coordinator wants this node running. The set is closed:
+        # run_stage, stop_stage, run_prompt. Anything else is ignored.
+        try:
+            work = coord.poll()
+            handle_deployment_commands(coord, work.get("deployment_commands") or [])
+            refresh_stage_status(coord)
+        except RuntimeError as exc:
+            print(f"work poll failed: {exc}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

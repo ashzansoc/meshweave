@@ -40,6 +40,16 @@ Real telemetry only — read from NVML and /proc. Nothing is estimated.
 If no NVIDIA driver is present the agent registers anyway and reports `gpu_error`.
 It never invents a device.
 
+## Running a model across several nodes
+
+The installer also places the stage runtime at `/opt/meshweave/stage_runner.py`.
+A node needs the agent from this version to take part in a deployment: re-run the
+same command to update it in place.
+
+To join a multi-node deployment, the instance must publish a TCP port other than
+SSH. That port is how the neighbouring stage connects; a node that only exposes
+SSH cannot be part of a chain. See `docs/DEPLOYMENTS.md`.
+
 ## What it does not do
 
 - **No shell endpoint.** The coordinator cannot run a command on your machine.
