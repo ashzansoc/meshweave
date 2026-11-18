@@ -42,7 +42,11 @@ def test_deployment_is_refused_when_a_node_publishes_no_port(client: TestClient)
 
     response = client.post(
         "/v1/deployments",
-        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "PIPELINE",
+        },
     )
     assert response.status_code == 409
     assert "beta" in response.json()["detail"]
@@ -56,6 +60,7 @@ def test_deployment_plans_layers_and_queues_a_stage(client: TestClient) -> None:
         json={
             "model": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct",
             "node_ids": ["alpha", "beta"],
+            "mode": "PIPELINE",
         },
     )
     assert response.status_code == 200, response.text
@@ -81,7 +86,11 @@ def test_prompts_wait_until_every_stage_is_running(client: TestClient) -> None:
 
     created = client.post(
         "/v1/deployments",
-        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "PIPELINE",
+        },
     ).json()
     deployment_id = created["deployment_id"]
 
@@ -178,7 +187,11 @@ def test_a_stage_that_dies_while_a_peer_downloads_is_retried(client: TestClient)
 
     created = client.post(
         "/v1/deployments",
-        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "PIPELINE",
+        },
     ).json()
     deployment_id = created["deployment_id"]
 
@@ -212,7 +225,11 @@ def test_stopping_a_deployment_is_not_undone_by_a_status_report(client: TestClie
 
     created = client.post(
         "/v1/deployments",
-        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "PIPELINE",
+        },
     ).json()
     deployment_id = created["deployment_id"]
 
@@ -269,3 +286,35 @@ def test_execution_evidence_survives_the_result_endpoint(client: TestClient) -> 
     assert result["activation_bytes_per_token"] == 1792.0
     assert result["world"] == 2
     assert result["gpu_during_generation"]["util_pct_max"] == 97.0
+
+
+def test_auto_mode_replicates_when_one_node_can_hold_the_model(client: TestClient) -> None:
+    """Never split what fits: a replica is faster and scales with nodes."""
+    _add_nodes(client, node("alpha", mapped={10100: 41000}), node("beta", mapped={10100: 42000}))
+
+    response = client.post(
+        "/v1/deployments",
+        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["mode"] == "REPLICA"
+    assert [s["layers"] for s in body["stages"]] == ["[0,24)", "[0,24)"]
+
+
+def test_auto_mode_splits_when_no_node_can_hold_the_model(client: TestClient) -> None:
+    state = client.app.state.mw
+    # 0.8 GiB holds half a model but not a whole one.
+    tiny = node("tiny", vram_gib=0.8, mapped={10100: 41000})
+    other = node("other", vram_gib=0.8, mapped={10100: 41002})
+    for record in (tiny, other):
+        state.registry.register(record.registration)
+        state.registry.get(record.node_id).inventory = record.inventory
+
+    response = client.post(
+        "/v1/deployments",
+        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["tiny", "other"]},
+    )
+    # Neither node can hold a full copy, so AUTO falls back to a split.
+    assert response.status_code == 200, response.text
+    assert response.json()["mode"] == "PIPELINE"

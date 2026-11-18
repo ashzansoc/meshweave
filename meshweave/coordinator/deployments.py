@@ -567,6 +567,42 @@ def plan_replicas(
     return stages
 
 
+def best_single_node(
+    *, records: list[Any], config: DenseConfig, max_seq: int = 2048, vram_headroom: float = 0.85
+) -> tuple[str | None, str]:
+    """Can any one node hold the whole model? Returns (node_id, reason).
+
+    This is the strategy selector's first question. A model that fits one GPU
+    should never be split: replication is both faster per request and the only
+    configuration whose throughput grows with the node count.
+    """
+    dtype_bytes = dtype_bytes_for(config.dtype)
+    resident = config.stage_bytes(
+        0, config.layers, owns_embed=True, owns_head=True, dtype_bytes=dtype_bytes
+    )
+    kv = config.kv_bytes_per_stage_token(0, config.layers, dtype_bytes) * max_seq
+    needed = resident + kv
+
+    best: tuple[str, int] | None = None
+    for record in records:
+        inventory = record.inventory
+        if inventory is None or not inventory.gpus:
+            continue
+        if not agent_can_deploy(inventory.agent_version):
+            continue
+        free = max(g.vram_free_bytes for g in inventory.gpus)
+        if free * vram_headroom >= needed:
+            if best is None or free > best[1]:
+                best = (record.node_id, free)
+
+    if best is None:
+        return None, (
+            f"no single node has the {needed / GIB:.2f} GiB a full copy needs "
+            f"(weights {resident / GIB:.2f} GiB + KV {kv / GIB:.2f} GiB)"
+        )
+    return best[0], f"{best[0]} can hold the whole model in {needed / GIB:.2f} GiB"
+
+
 def choose_replica(deployment: "Deployment", healthy) -> str | None:
     """Pick the replica with the least work: fewest in flight, then fewest queued.
 

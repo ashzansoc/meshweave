@@ -48,6 +48,7 @@ from meshweave.coordinator.deployments import (
     plan_deployment,
     plan_replicas,
     choose_replica,
+    best_single_node,
 )
 from meshweave.core import (
     ExecutionRecord,
@@ -155,8 +156,9 @@ class DeploymentRequest(BaseModel):
     node_ids: list[str] = Field(default_factory=list)
     cluster_id: str | None = None
     max_seq: int = 2048
-    # "PIPELINE" splits one model across nodes; "REPLICA" runs a full copy on each.
-    mode: str = "PIPELINE"
+    # "AUTO" lets the coordinator choose, "PIPELINE" splits one model across
+    # nodes, "REPLICA" runs a full copy on each.
+    mode: str = "AUTO"
 
 
 class DeploymentStatusReport(BaseModel):
@@ -778,10 +780,20 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         mode = request.mode.upper()
-        if mode not in ("PIPELINE", "REPLICA"):
+        if mode not in ("AUTO", "PIPELINE", "REPLICA"):
             raise HTTPException(
-                status_code=400, detail="mode must be PIPELINE or REPLICA"
+                status_code=400, detail="mode must be AUTO, PIPELINE or REPLICA"
             )
+
+        chosen_reason = None
+        if mode == "AUTO":
+            # Never split what fits: a replica is faster per request and scales
+            # with nodes, while a split pays a round trip per token.
+            node_id, reason = best_single_node(
+                records=records, config=config, max_seq=request.max_seq
+            )
+            mode = "REPLICA" if node_id else "PIPELINE"
+            chosen_reason = reason
 
         try:
             if mode == "REPLICA":
@@ -798,6 +810,8 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         dtype = effective_dtype(config, records)
         deployment = new_deployment(repo, stages, config, request.max_seq, dtype=dtype)
         deployment.mode = mode
+        if chosen_reason:
+            deployment.message = chosen_reason
         if request.cluster_id:
             deployment.config["cluster_id"] = request.cluster_id
         state.deployments.add(deployment)

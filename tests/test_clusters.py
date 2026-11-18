@@ -154,7 +154,11 @@ def test_a_model_can_be_deployed_to_a_cluster(client: TestClient) -> None:
 
     response = client.post(
         "/v1/deployments",
-        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "cluster_id": "F16-VDC-001"},
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "cluster_id": "F16-VDC-001",
+            "mode": "PIPELINE",
+        },
     )
     assert response.status_code == 200, response.text
     body = response.json()
