@@ -46,6 +46,8 @@ from meshweave.coordinator.deployments import (
     new_deployment,
     normalise_repo,
     plan_deployment,
+    plan_replicas,
+    choose_replica,
 )
 from meshweave.core import (
     ExecutionRecord,
@@ -153,6 +155,8 @@ class DeploymentRequest(BaseModel):
     node_ids: list[str] = Field(default_factory=list)
     cluster_id: str | None = None
     max_seq: int = 2048
+    # "PIPELINE" splits one model across nodes; "REPLICA" runs a full copy on each.
+    mode: str = "PIPELINE"
 
 
 class DeploymentStatusReport(BaseModel):
@@ -709,6 +713,8 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             "message": deployment.message,
             "created_at": deployment.created_at,
             "strategy": deployment.config.get("strategy"),
+            "mode": deployment.mode,
+            "replica_load": dict(deployment.replica_load),
             "dtype": deployment.config.get("dtype"),
             "layers": deployment.config.get("layers"),
             "stages": [
@@ -771,15 +777,27 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         except Exception as exc:  # noqa: BLE001 - the reason matters more than the type
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-        try:
-            stages = plan_deployment(
-                model=repo, records=records, config=config, max_seq=request.max_seq
+        mode = request.mode.upper()
+        if mode not in ("PIPELINE", "REPLICA"):
+            raise HTTPException(
+                status_code=400, detail="mode must be PIPELINE or REPLICA"
             )
+
+        try:
+            if mode == "REPLICA":
+                stages = plan_replicas(
+                    records=records, config=config, max_seq=request.max_seq
+                )
+            else:
+                stages = plan_deployment(
+                    model=repo, records=records, config=config, max_seq=request.max_seq
+                )
         except DeploymentRejected as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         dtype = effective_dtype(config, records)
         deployment = new_deployment(repo, stages, config, request.max_seq, dtype=dtype)
+        deployment.mode = mode
         if request.cluster_id:
             deployment.config["cluster_id"] = request.cluster_id
         state.deployments.add(deployment)
@@ -878,6 +896,10 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         payload = result.model_dump()
         payload["at"] = utcnow().isoformat()
         deployment.results.append(payload)
+        if deployment.mode == "REPLICA":
+            node_id = payload.get("node_id")
+            if node_id and deployment.replica_load.get(node_id):
+                deployment.replica_load[node_id] -= 1
         for prompt in deployment.prompts:
             if prompt.get("id") == result.prompt_id:
                 prompt["state"] = "done"
@@ -898,6 +920,23 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                 ),
             )
         prompt_id = f"p-{secrets.token_hex(4)}"
+        assigned = None
+        if deployment.mode == "REPLICA":
+            def _healthy(node_id: str) -> bool:
+                info = deployment.node_status.get(node_id, {})
+                if info.get("phase") != "running":
+                    return False
+                record = state.registry.get(node_id)
+                return bool(record and record.status.value == "HEALTHY")
+
+            assigned = choose_replica(deployment, _healthy)
+            if assigned is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="no healthy replica is available to take this request",
+                )
+            deployment.replica_load[assigned] = deployment.replica_load.get(assigned, 0) + 1
+
         deployment.prompts.append(
             {
                 "id": prompt_id,
@@ -906,6 +945,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                 "temperature": request.temperature,
                 "top_p": request.top_p,
                 "state": "queued",
+                "assigned_node": assigned,
                 "at": utcnow().isoformat(),
             }
         )

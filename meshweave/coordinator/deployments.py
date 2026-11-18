@@ -126,6 +126,12 @@ class Deployment:
     stages: list[StagePlan] = field(default_factory=list)
     config: dict[str, Any] = field(default_factory=dict)
     stop_requested: bool = False
+    # "PIPELINE" splits one model across nodes; "REPLICA" runs a full copy on each.
+    # They are separate execution paths with separate cost models: a pipeline pays
+    # a round trip per token, a replica pays nothing between nodes.
+    mode: str = "PIPELINE"
+    # Requests currently in flight per node, for routing.
+    replica_load: dict[str, int] = field(default_factory=dict)
     node_status: dict[str, dict[str, Any]] = field(default_factory=dict)
     results: list[dict[str, Any]] = field(default_factory=list)
     prompts: list[dict[str, Any]] = field(default_factory=list)
@@ -221,12 +227,15 @@ class DeploymentStore:
                     )
                     continue
                 if state.get("phase") not in ("running", "starting", "loading"):
+                    # A replica is a complete model in one process: world=1 and the
+                    # full layer range. A pipeline stage is one slice of a chain.
+                    replica = deployment.mode == "REPLICA"
                     commands.append(
                         {
                             "kind": "run_stage",
                             "deployment_id": deployment.deployment_id,
                             "rank": stage.rank,
-                            "world": len(deployment.stages),
+                            "world": 1 if replica else len(deployment.stages),
                             "repo": deployment.model,
                             "start": stage.start,
                             "end": stage.end,
@@ -244,11 +253,20 @@ class DeploymentStore:
                         }
                     )
 
-                # Prompts are served by rank 0 only, through the local control
-                # socket. Nothing new is exposed to the network for this.
-                if stage.rank == 0:
+                # Prompts go to one node: rank 0 for a pipeline, the routed
+                # replica for a replicated deployment. The control socket is local
+                # to that node, so nothing new is exposed to the network.
+                serves_prompts = (
+                    stage.rank == 0
+                    if deployment.mode == "PIPELINE"
+                    else True
+                )
+                if serves_prompts:
                     for prompt in deployment.prompts:
                         if prompt.get("state") != "queued":
+                            continue
+                        assigned = prompt.get("assigned_node")
+                        if assigned and assigned != node_id:
                             continue
                         prompt["state"] = "sent"
                         dirty = True
@@ -482,6 +500,93 @@ def effective_dtype(config: DenseConfig, records: list[Any]) -> str:
             if capability and tuple(int(part) for part in capability) < (8, 0):
                 return "float16"
     return config.dtype
+
+
+def plan_replicas(
+    *,
+    records: list[Any],
+    config: DenseConfig,
+    max_seq: int = 2048,
+    vram_headroom: float = 0.85,
+    disk_headroom: float = 0.90,
+) -> list[StagePlan]:
+    """One full-model stage per node, with no network between them.
+
+    Each replica is its own ``world=1`` stage: the whole model on one GPU, which
+    is both the fastest configuration and the one that scales with nodes. This is
+    the path to use whenever the model fits -- splitting a model that fits is pure
+    overhead, as Phase 1 measured (19.02 tok/s became 2.93 when split).
+    """
+    if not records:
+        raise DeploymentRejected("select at least one node")
+
+    dtype_bytes = dtype_bytes_for(config.dtype)
+    resident = config.stage_bytes(
+        0, config.layers, owns_embed=True, owns_head=True, dtype_bytes=dtype_bytes
+    )
+    kv_reserve = config.kv_bytes_per_stage_token(0, config.layers, dtype_bytes) * max_seq
+    checkpoint = config.checkpoint_bytes(dtype_bytes)
+
+    stages: list[StagePlan] = []
+    for record in records:
+        inventory = record.inventory
+        if inventory is None or not inventory.gpus:
+            raise DeploymentRejected(f"{record.node_id} reports no GPU")
+        if not agent_can_deploy(inventory.agent_version):
+            raise DeploymentRejected(
+                f"{record.node_id} runs agent {inventory.agent_version or 'unknown'}; "
+                "deployments need 0.4.0 or newer"
+            )
+
+        free = max(g.vram_free_bytes for g in inventory.gpus)
+        if resident + kv_reserve > free * vram_headroom:
+            raise DeploymentRejected(
+                f"{record.node_id} has {free / GIB:.2f} GiB free VRAM but a full "
+                f"replica needs {(resident + kv_reserve) / GIB:.2f} GiB"
+            )
+        disk_free = inventory.host.disk_available_bytes or 0
+        if checkpoint > disk_free * disk_headroom:
+            raise DeploymentRejected(
+                f"{record.node_id} has {disk_free / GIB:.1f} GiB disk free but the "
+                f"checkpoint is {checkpoint / GIB:.1f} GiB"
+            )
+
+        stages.append(
+            StagePlan(
+                node_id=record.node_id,
+                rank=0,
+                start=0,
+                end=config.layers,
+                resident_bytes=resident,
+                checkpoint_bytes=checkpoint,
+                address=None,
+                listen_port=None,
+                external_port=None,
+            )
+        )
+    return stages
+
+
+def choose_replica(deployment: "Deployment", healthy) -> str | None:
+    """Pick the replica with the least work: fewest in flight, then fewest queued.
+
+    Ties break by node id so the choice is deterministic. A node that is not
+    healthy is never chosen, and a deployment with no healthy replica returns None
+    rather than sending work somewhere that cannot take it.
+    """
+    candidates = [s.node_id for s in deployment.stages if healthy(s.node_id)]
+    if not candidates:
+        return None
+
+    def score(node_id: str) -> tuple[int, int, str]:
+        queued = sum(
+            1
+            for p in deployment.prompts
+            if p.get("assigned_node") == node_id and p.get("state") == "queued"
+        )
+        return (deployment.replica_load.get(node_id, 0), queued, node_id)
+
+    return min(candidates, key=score)
 
 
 def new_deployment(

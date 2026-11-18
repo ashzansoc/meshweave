@@ -184,3 +184,126 @@ def test_validate_reflects_what_members_report_now(client: TestClient) -> None:
     validated = client.post("/v1/clusters/F16-VDC-001/validate").json()
     assert validated["ok"] is False
     assert any("beta" in problem and "unreachable" in problem for problem in validated["errors"])
+
+# --------------------------------------------------------------------------- #
+# replication
+# --------------------------------------------------------------------------- #
+
+
+def test_replicas_hold_the_whole_model_on_each_node(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+
+    # A replica is one complete stage per node, not a slice.
+    assert [s["layers"] for s in body["stages"]] == ["[0,24)", "[0,24)"]
+    assert body["stages"][0]["resident_gib"] > 0.5
+
+
+def test_a_replica_deployment_is_not_split(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    ).json()
+
+    for node_id in ("alpha", "beta"):
+        work = client.get(
+            f"/v1/agents/{node_id}/work", headers={"authorization": "Bearer test-enroll"}
+        ).json()
+        stage = [c for c in work["deployment_commands"] if c["kind"] == "run_stage"][0]
+        assert stage["world"] == 1
+        assert stage["start"] == 0
+        assert stage["end"] == 24
+
+
+def test_a_prompt_goes_to_exactly_one_replica(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    ).json()
+    deployment_id = created["deployment_id"]
+
+    for node_id in ("alpha", "beta"):
+        client.post(
+            f"/v1/deployments/{deployment_id}/nodes/{node_id}/status",
+            json={"phase": "running"},
+        )
+
+    sent = client.post(
+        f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "hello"}
+    )
+    assert sent.status_code == 200
+
+    served = []
+    for node_id in ("alpha", "beta"):
+        work = client.get(
+            f"/v1/agents/{node_id}/work", headers={"authorization": "Bearer test-enroll"}
+        ).json()
+        prompts = [c for c in work["deployment_commands"] if c["kind"] == "run_prompt"]
+        served.extend((node_id, p["prompt_id"]) for p in prompts)
+
+    assert len(served) == 1, served
+
+
+def test_requests_spread_across_replicas(client: TestClient) -> None:
+    """Four requests must not all land on the first replica."""
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    ).json()
+    deployment_id = created["deployment_id"]
+    for node_id in ("alpha", "beta"):
+        client.post(
+            f"/v1/deployments/{deployment_id}/nodes/{node_id}/status",
+            json={"phase": "running"},
+        )
+
+    for _ in range(4):
+        response = client.post(
+            f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "x"}
+        )
+        assert response.status_code == 200
+
+    detail = client.get(f"/v1/deployments/{deployment_id}").json()
+    load = detail["replica_load"]
+    assert sum(load.values()) == 4
+    assert load.get("alpha") == 2 and load.get("beta") == 2
+
+
+def test_a_replica_is_skipped_when_it_is_not_running(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+        },
+    ).json()
+    deployment_id = created["deployment_id"]
+    client.post(
+        f"/v1/deployments/{deployment_id}/nodes/alpha/status", json={"phase": "running"}
+    )
+
+    response = client.post(f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "x"})
+    assert response.status_code == 200
+    detail = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert detail["replica_load"] == {"alpha": 1}
