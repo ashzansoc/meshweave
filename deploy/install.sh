@@ -646,13 +646,20 @@ def _cmdline(pid: int) -> str:
         return ""
 
 
-def _tail(path: Path, limit: int = 400) -> str:
+def _tail(path: Path, lines: int = 12, chars: int = 1500) -> str:
+    """The end of a stage log.
+
+    More than the final line on purpose: a Python traceback ends with the
+    exception text, and reporting only that hid a TypeError whose location was
+    three lines above. The whole tail is capped so a chatty log cannot flood the
+    coordinator.
+    """
     try:
         text = path.read_text(errors="replace")
     except OSError:
         return ""
-    lines = [line for line in text.strip().splitlines() if line.strip()]
-    return lines[-1][:limit] if lines else ""
+    kept = [line for line in text.strip().splitlines() if line.strip()][-lines:]
+    return "\n".join(kept)[-chars:]
 
 
 def stage_phase(entry: dict) -> tuple[str, str | None]:

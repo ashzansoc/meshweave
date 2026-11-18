@@ -621,6 +621,12 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         if state.deployments.stage_for(deployment_id, node_id) is None:
             raise HTTPException(status_code=404, detail=f"{node_id} has no stage here")
 
+        previous = deployment.node_status.get(node_id, {})
+        if previous.get("phase") == "failed" and report.phase == "stopped":
+            # The stage already failed; the reason is the useful part. Keep it
+            # rather than replacing it with the shutdown notice.
+            return _summarise(deployment)
+
         entry = {
             "phase": report.phase,
             "detail": report.detail,

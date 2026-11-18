@@ -201,7 +201,10 @@ class DeploymentStore:
                 if stage.node_id != node_id:
                     continue
                 state = deployment.node_status.get(node_id, {})
-                if deployment.stop_requested or deployment.status in ("STOPPED", "FAILED"):
+                # A FAILED deployment is not asked to stop: the stage is already
+                # gone, and the "stopped" report would overwrite the reason it
+                # failed, which is the only useful thing left.
+                if deployment.stop_requested or deployment.status == "STOPPED":
                     commands.append(
                         {
                             "kind": "stop_stage",

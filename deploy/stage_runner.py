@@ -97,7 +97,9 @@ def ensure_model(repo: str, cache_dir: Path) -> Path:
     return Path(path)
 
 
-def build_stage(args: argparse.Namespace, config: DenseConfig) -> tuple[DenseStage, int]:
+def build_stage(
+    args: argparse.Namespace, config: DenseConfig, model_dir: Path
+) -> tuple[DenseStage, int]:
     dtype_name = args.dtype
     if (
         dtype_name == "bfloat16"
@@ -118,7 +120,7 @@ def build_stage(args: argparse.Namespace, config: DenseConfig) -> tuple[DenseSta
     owns_head = args.rank == args.world - 1
 
     stage_weights = load_stage(
-        Path(args.model_dir),
+        model_dir,
         config,
         args.start,
         args.end,
@@ -527,7 +529,7 @@ def main(argv: list[str] | None = None) -> int:
         else ensure_model(args.repo, Path(args.cache))
     )
     config = DenseConfig.from_file(model_dir / "config.json")
-    stage, _ = build_stage(args, config)
+    stage, _ = build_stage(args, config, model_dir)
 
     tokenizer = None
     if args.rank == 0:
