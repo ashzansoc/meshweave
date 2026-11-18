@@ -23,7 +23,9 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
         return json.dumps(QWEN_05B)
 
     monkeypatch.setattr(coordinator_app, "fetch_model_config", fake_config)
-    settings = CoordinatorSettings(port=8799, deployments_file=tmp_path / "deployments.json")
+    settings = CoordinatorSettings(
+        port=8799, deployments_file=tmp_path / "deployments.json", enrollment_token="test-enroll"
+    )
     return TestClient(coordinator_app.create_app(settings))
 
 
@@ -61,7 +63,7 @@ def test_deployment_plans_layers_and_queues_a_stage(client: TestClient) -> None:
     assert [s["layers"] for s in body["stages"]] == ["[0,12)", "[12,24)"]
     assert body["model"] == "Qwen/Qwen2.5-0.5B-Instruct"
 
-    work = client.get("/v1/agents/alpha/work", headers={"authorization": "Bearer x"})
+    work = client.get("/v1/agents/alpha/work", headers={"authorization": "Bearer test-enroll"})
     assert work.status_code == 200
     commands = work.json()["deployment_commands"]
     assert [c["kind"] for c in commands] == ["run_stage"]
@@ -70,7 +72,7 @@ def test_deployment_plans_layers_and_queues_a_stage(client: TestClient) -> None:
 
     # Polling again before the stage reports running must not duplicate it: the
     # agent starts one process, not one per poll.
-    again = client.get("/v1/agents/alpha/work", headers={"authorization": "Bearer x"})
+    again = client.get("/v1/agents/alpha/work", headers={"authorization": "Bearer test-enroll"})
     assert [c["kind"] for c in again.json()["deployment_commands"]] == ["run_stage"]
 
 
@@ -98,7 +100,7 @@ def test_prompts_wait_until_every_stage_is_running(client: TestClient) -> None:
     sent = client.post(f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "hello"})
     assert sent.status_code == 200
 
-    work = client.get("/v1/agents/alpha/work", headers={"authorization": "Bearer x"}).json()
+    work = client.get("/v1/agents/alpha/work", headers={"authorization": "Bearer test-enroll"}).json()
     prompts = [c for c in work["deployment_commands"] if c["kind"] == "run_prompt"]
     assert len(prompts) == 1
     assert prompts[0]["prompt"] == "hello"
@@ -148,7 +150,7 @@ def test_stop_then_forget(client: TestClient) -> None:
     assert stopped.status_code == 200
     assert stopped.json()["status"] == "STOPPED"
 
-    work = client.get("/v1/agents/solo/work", headers={"authorization": "Bearer x"}).json()
+    work = client.get("/v1/agents/solo/work", headers={"authorization": "Bearer test-enroll"}).json()
     assert [c["kind"] for c in work["deployment_commands"]] == ["stop_stage"]
 
     removed = client.delete(f"/v1/deployments/{deployment_id}")

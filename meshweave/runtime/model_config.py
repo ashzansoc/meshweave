@@ -176,7 +176,17 @@ class DenseConfig:
         )
 
     def kv_bytes_per_token(self, dtype_bytes: int) -> int:
+        """KV for the whole model: one layer's worth per layer."""
         return 2 * self.layers * self.kv_heads * self.head_dim * dtype_bytes
+
+    def kv_bytes_per_stage_token(self, start: int, end: int, dtype_bytes: int) -> int:
+        """KV for the layers one stage owns.
+
+        A stage caches only its own layers, so reserving the whole model's KV on
+        every node over-reserved by the node count and refused deployments that
+        would have fitted.
+        """
+        return 2 * max(0, end - start) * self.kv_heads * self.head_dim * dtype_bytes
 
     def to_dict(self) -> dict[str, Any]:
         return {

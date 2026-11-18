@@ -40,7 +40,7 @@ GIB = 1024**3
 # The agent gained the work queue in this version. An older agent registers and
 # reports telemetry but never polls, so a deployment sent to it is a no-op that
 # looks like a hang.
-MIN_DEPLOY_AGENT = (0, 3, 0)
+MIN_DEPLOY_AGENT = (0, 4, 0)
 
 
 def agent_can_deploy(version: str | None) -> bool:
@@ -233,6 +233,7 @@ class DeploymentStore:
                             "device": "cuda",
                             "dtype": deployment.config.get("dtype", "bfloat16"),
                             "max_seq": deployment.config.get("max_seq", 2048),
+                            "stage_token": deployment.config.get("stage_token"),
                         }
                     )
 
@@ -265,6 +266,36 @@ class DeploymentStore:
             if stage.rank == rank:
                 return stage.address
         return None
+
+    def mark_unreachable(self, node_ids: list[str]) -> list[str]:
+        """Fail the stages of nodes the registry has reaped.
+
+        A stage on a node that stopped heartbeating is not running; pretending
+        otherwise leaves a deployment that reports RUNNING while nothing computes.
+        """
+        affected: list[str] = []
+        for deployment in self._items.values():
+            touched = False
+            for stage in deployment.stages:
+                if stage.node_id not in node_ids:
+                    continue
+                entry = deployment.node_status.get(stage.node_id, {})
+                if entry.get("phase") in ("failed", "stopped"):
+                    continue
+                deployment.node_status[stage.node_id] = {
+                    "phase": "failed",
+                    "detail": "node unreachable: no heartbeat",
+                    "pid": entry.get("pid"),
+                    "at": utcnow(),
+                }
+                touched = True
+            if touched and deployment.status not in ("STOPPED", "FAILED"):
+                deployment.status = "FAILED"
+                deployment.message = "a node hosting this deployment stopped responding"
+                affected.append(deployment.deployment_id)
+        if affected:
+            self._save()
+        return affected
 
     def stage_for(self, deployment_id: str, node_id: str) -> StagePlan | None:
         deployment = self._items.get(deployment_id)
@@ -337,7 +368,6 @@ def plan_deployment(
     dtype_bytes = dtype_bytes_for(config.dtype)
     bounds = partition_layers(config, world)
     checkpoint = config.checkpoint_bytes(dtype_bytes)
-    kv_reserve = config.kv_bytes_per_token(dtype_bytes) * max_seq
 
     stages: list[StagePlan] = []
     for rank, (record, (start, end)) in enumerate(zip(records, bounds, strict=True)):
@@ -364,6 +394,7 @@ def plan_deployment(
             owns_head=(rank == world - 1),
             dtype_bytes=dtype_bytes,
         )
+        kv_reserve = config.kv_bytes_per_stage_token(start, end, dtype_bytes) * max_seq
         needed = resident + kv_reserve
         if needed > free * vram_headroom:
             raise DeploymentRejected(
@@ -450,6 +481,9 @@ def new_deployment(
         stages=stages,
         config={
             "dtype": dtype or config.dtype,
+            # Every stage of this deployment must present this secret in its
+            # handshake, so a published port cannot be fed by a stranger.
+            "stage_token": secrets.token_hex(16),
             "max_seq": max_seq,
             "architecture": config.architecture,
             "layers": config.layers,

@@ -258,7 +258,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-AGENT_VERSION = "0.3.0"
+AGENT_VERSION = "0.4.0"
 CONFIG_PATH = Path(os.environ.get("MESHWEAVE_AGENT_CONFIG", "/etc/meshweave/agent.json"))
 
 # Node names are generated, not derived from the hostname. A rented container
@@ -527,7 +527,12 @@ class Coordinator:
         enroll: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        # Two credentials, deliberately kept apart: the enrollment token proves a
+        # host may join, the node token proves which node is asking for work.
+        # Swapping the bearer after registration must not change what is sent as
+        # the enrollment header.
         self.token = token
+        self.enrollment_token = token if enroll else None
         self.node_id = node_id
         self.enroll = enroll
         self._ssl = ssl.create_default_context(cafile=ca) if ca else None
@@ -538,10 +543,10 @@ class Coordinator:
         req = urllib.request.Request(url, data=data, method=method)
         req.add_header("Authorization", f"Bearer {self.token}")
         req.add_header("Content-Type", "application/json")
-        if self.enroll:
+        if self.enrollment_token:
             # Open enrollment: the coordinator accepts this shared bootstrap token
             # on /v1/nodes/register so a new host needs no prior credential.
-            req.add_header("x-meshweave-enrollment", self.token)
+            req.add_header("x-meshweave-enrollment", self.enrollment_token)
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=self._ssl) as resp:
                 raw = resp.read()
@@ -555,7 +560,7 @@ class Coordinator:
             raise RuntimeError(f"{method} {path} -> {exc.reason}") from exc
 
     def register(self, inventory: dict) -> dict:
-        return self._request(
+        response = self._request(
             "POST",
             "/v1/nodes/register",
             {
@@ -566,6 +571,35 @@ class Coordinator:
                 "region": None,
             },
         )
+        node_token = response.get("node_token")
+        if node_token:
+            self.token = node_token
+            self._remember_token(node_token)
+        return response
+
+    def _remember_token(self, token: str) -> None:
+        """Persist the node credential so a restart need not re-enroll.
+
+        Written only when the agent was started from the installer's config file.
+        An agent launched with --coordinator/--token on a command line owns no
+        file and leaves the caller's credentials alone.
+        """
+        if not CONFIG_PATH.exists():
+            return
+        try:
+            config = json.loads(CONFIG_PATH.read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        if config.get("node_token") == token:
+            return
+        config["node_token"] = token
+        try:
+            tmp = CONFIG_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(config, indent=2))
+            os.chmod(tmp, 0o600)
+            tmp.replace(CONFIG_PATH)
+        except OSError as exc:
+            print(f"warning: could not store the node token: {exc}", file=sys.stderr, flush=True)
 
     def heartbeat(self, inventory: dict) -> dict:
         """Send a Heartbeat envelope, which is what the coordinator expects.
@@ -598,6 +632,13 @@ class Coordinator:
 
     def report_result(self, deployment_id: str, result: dict) -> None:
         self._request("POST", f"/v1/deployments/{deployment_id}/result", result)
+
+    def report_network(self, measurement_id: str, phase: str, payload: dict) -> None:
+        self._request(
+            "POST",
+            f"/v1/nodes/{self.node_id}/network-result",
+            {"measurement_id": measurement_id, "phase": phase, "payload": payload},
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -721,7 +762,12 @@ def start_stage(command: dict) -> dict:
         "--control",
         str(CONTROL_SOCKET),
     ]
-    for flag, key in (("--listen", "listen"), ("--next", "next"), ("--reply", "reply")):
+    for flag, key in (
+        ("--listen", "listen"),
+        ("--next", "next"),
+        ("--reply", "reply"),
+        ("--stage-token", "stage_token"),
+    ):
         value = command.get(key)
         if value:
             argv += [flag, str(value)]
@@ -835,10 +881,72 @@ def run_prompt(command: dict) -> dict:
     return result
 
 
+# Echo listeners started for a network measurement, keyed by measurement id.
+# Each closes itself at its ttl; this dict only exists so a repeated command does
+# not try to bind the same port twice.
+_ECHO_SERVERS: dict[str, object] = {}
+
+
+def start_echo(command: dict) -> dict:
+    """Listen on the port the coordinator chose, for a bounded time."""
+    from meshweave.runtime.echo import EchoServer
+
+    measurement_id = str(command["measurement_id"])
+    port = int(command["port"])
+    existing = _ECHO_SERVERS.get(measurement_id)
+    if existing is None:
+        server = EchoServer("0.0.0.0", port, ttl_s=float(command.get("ttl_s", 180)))
+        server.start()
+        _ECHO_SERVERS[measurement_id] = server
+        print(f"echo listening on 0.0.0.0:{port} for {measurement_id}", file=sys.stderr, flush=True)
+    return {"phase": "echo_ready", "payload": {"port": port}}
+
+
+def run_probe(command: dict) -> dict:
+    """Measure the link to another node and report it, including a failure."""
+    from meshweave.runtime.echo import probe
+
+    result = probe(
+        str(command["host"]),
+        int(command["port"]),
+        rtt_count=int(command.get("rtt_count", 20)),
+        bulk_bytes=int(command.get("bulk_bytes", 4 * 1024 * 1024)),
+        timeout_s=float(command.get("timeout_s", 25.0)),
+    )
+    return {
+        "phase": "probe_result",
+        "payload": {"target": command.get("target"), "result": result.to_dict()},
+    }
+
+
 def handle_deployment_commands(coord: Coordinator, commands: list[dict]) -> None:
-    """Act on the closed set of deployment commands, and report every outcome."""
+    """Act on the closed set of commands, and report every outcome."""
     for command in commands or []:
         kind = command.get("kind")
+
+        # Network probes are not tied to a deployment, so they are handled first.
+        if kind in ("run_echo", "probe_peer"):
+            measurement_id = str(command.get("measurement_id", ""))
+            if not measurement_id:
+                continue
+            try:
+                if kind == "run_echo":
+                    outcome = start_echo(command)
+                else:
+                    # A probe can take a while on a slow link; keep the loop free.
+                    threading.Thread(
+                        target=_probe_worker,
+                        args=(coord, measurement_id, command),
+                        daemon=True,
+                    ).start()
+                    continue
+                coord.report_network(measurement_id, outcome["phase"], outcome["payload"])
+            except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+                coord.report_network(
+                    measurement_id, "error", {"error": f"{type(exc).__name__}: {exc}"}
+                )
+            continue
+
         deployment_id = str(command.get("deployment_id", ""))
         if not deployment_id:
             continue
@@ -868,10 +976,101 @@ def handle_deployment_commands(coord: Coordinator, commands: list[dict]) -> None
             print(f"{kind} failed: {exc}", file=sys.stderr, flush=True)
 
 
+def _probe_worker(coord: Coordinator, measurement_id: str, command: dict) -> None:
+    """Run one link probe off the main loop and report the result."""
+    try:
+        outcome = run_probe(command)
+    except Exception as exc:  # noqa: BLE001 - reported, never lost
+        outcome = {
+            "phase": "probe_result",
+            "payload": {
+                "target": command.get("target"),
+                "result": {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            },
+        }
+    try:
+        coord.report_network(measurement_id, outcome["phase"], outcome["payload"])
+    except RuntimeError as exc:
+        print(f"could not report probe result: {exc}", file=sys.stderr, flush=True)
+
+
+class GpuSampler:
+    """Samples every GPU while a request runs.
+
+    The claim that matters is that this node's GPU was busy *during* the
+    generation, so a point-in-time reading before or after is not evidence.
+    NVML reports a one-second average, so even a short generation yields a
+    sample that covers real work.
+    """
+
+    def __init__(self, interval_s: float = 0.5) -> None:
+        self.interval_s = interval_s
+        self.samples: list[dict] = []
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "GpuSampler":
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        try:
+            import pynvml
+        except ImportError:
+            return
+        try:
+            pynvml.nvmlInit()
+        except Exception:  # noqa: BLE001 - no driver, no samples
+            return
+        try:
+            count = pynvml.nvmlDeviceGetCount()
+            while not self._stop.is_set():
+                for index in range(count):
+                    try:
+                        handle = pynvml.nvmlDeviceGetHandleByIndex(index)
+                        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                        memory = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                        self.samples.append(
+                            {
+                                "gpu": index,
+                                "util_pct": float(util.gpu),
+                                "vram_used_bytes": int(memory.used),
+                            }
+                        )
+                    except Exception:  # noqa: BLE001 - counter unsupported
+                        continue
+                self._stop.wait(self.interval_s)
+        finally:
+            with contextlib.suppress(Exception):
+                pynvml.nvmlShutdown()
+
+    def __exit__(self, *exc_info) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def summary(self) -> dict:
+        if not self.samples:
+            return {"samples": 0, "util_pct_max": None, "vram_used_bytes_max": None}
+        return {
+            "samples": len(self.samples),
+            "util_pct_max": max(s["util_pct"] for s in self.samples),
+            "util_pct_mean": round(
+                sum(s["util_pct"] for s in self.samples) / len(self.samples), 1
+            ),
+            "vram_used_bytes_max": max(s["vram_used_bytes"] for s in self.samples),
+            "devices": sorted({s["gpu"] for s in self.samples}),
+            "interval_s": self.interval_s,
+        }
+
+
 def _prompt_worker(coord: Coordinator, deployment_id: str, command: dict) -> None:
     """Run one prompt off the main loop and report whatever happened."""
     try:
-        result = run_prompt(command)
+        with GpuSampler() as sampler:
+            result = run_prompt(command)
+        result["gpu_during_generation"] = sampler.summary()
     except Exception as exc:  # noqa: BLE001 - reported, never lost
         result = {
             "prompt_id": command.get("prompt_id"),
@@ -949,7 +1148,10 @@ def main() -> int:
 
     node_id = cfg["node_id"]
     coord = Coordinator(
-        cfg["coordinator"], cfg["token"], node_id, cfg.get("ca"),
+        cfg["coordinator"],
+        cfg.get("node_token") or cfg["token"],
+        node_id,
+        cfg.get("ca"),
         enroll=bool(cfg.get("enroll") or args.enroll),
     )
 
@@ -1056,6 +1258,7 @@ for f in \
     meshweave/runtime/framing.py \
     meshweave/runtime/model_config.py \
     meshweave/runtime/dense.py \
+    meshweave/runtime/echo.py \
     meshweave/models/__init__.py \
     meshweave/models/base.py \
     experiments/model_execution/pipeline_node.py \

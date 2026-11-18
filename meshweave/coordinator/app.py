@@ -12,9 +12,12 @@ failure modes before the underlying execution is proven.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import secrets
+from collections import deque
 from pathlib import Path
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
@@ -23,10 +26,13 @@ from pydantic import BaseModel, Field
 from meshweave import __version__
 from meshweave.communication.auth import (
     WorkloadToken,
+    issue_node_token,
     issue_workload_token,
     load_or_create_secret,
+    verify_node_token,
 )
 from meshweave.config import CoordinatorSettings
+from meshweave.coordinator.network import NetworkProbeManager
 from meshweave.coordinator.deployments import (
     GIB,
     Deployment,
@@ -109,6 +115,19 @@ class WorkloadManager:
 
 
 
+class NetworkMeasureRequest(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
+    rtt_count: int = 20
+    bulk_bytes: int = 4 * 1024 * 1024
+
+
+class NetworkProbeReport(BaseModel):
+    measurement_id: str
+    phase: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+
 # --------------------------------------------------------------------------- #
 # deployment request bodies
 #
@@ -162,6 +181,11 @@ class CoordinatorState:
         self.graph: TopologyGraph | None = None
         self.secret = load_or_create_secret(SECRET_PATH)
         self.deployments = DeploymentStore(Path(settings.deployments_file))
+        self.network = NetworkProbeManager(self.registry.get)
+        # Per-node telemetry history for the charts. Bounded and session-only:
+        # it is what this coordinator observed while it was running, not a time
+        # series database, and the API says so.
+        self.series: dict[str, deque[dict[str, Any]]] = {}
         self._agent_clients: dict[str, Any] = {}
         self._reaper: asyncio.Task[None] | None = None
 
@@ -182,6 +206,90 @@ class CoordinatorState:
         return None
 
 
+def _availability(record: Any, deployments: Any) -> str:
+    """The brief's node vocabulary, derived rather than stored.
+
+    Internal status answers "is it alive", which is not the same question as
+    "can I deploy to it now". BUSY and AVAILABLE come from whether this node is
+    currently hosting a stage.
+    """
+    status = record.status.value
+    if status in ("UNREACHABLE", "REGISTERING"):
+        return "OFFLINE"
+    if status == "DRAINING":
+        return "MAINTENANCE"
+    if status == "DEGRADED":
+        return "DEGRADED"
+    busy = False
+    for deployment in deployments.all():
+        for stage in deployment.stages:
+            if stage.node_id != record.node_id:
+                continue
+            phase = deployment.node_status.get(stage.node_id, {}).get("phase")
+            if phase in ("running", "loading", "starting"):
+                busy = True
+    return "BUSY" if busy else "AVAILABLE"
+
+
+def _series_sample(record: Any) -> dict[str, Any]:
+    """One point from a heartbeat: enough to draw VRAM, utilisation and power."""
+    inventory = getattr(record, "inventory", None)
+    gpus = list(getattr(inventory, "gpus", []) or [])
+    host = getattr(inventory, "host", None)
+
+    def _max(values: list[Any]) -> float | None:
+        present = [float(v) for v in values if v is not None]
+        return max(present) if present else None
+
+    return {
+        "at": utcnow().isoformat(),
+        "vram_total_bytes": sum(g.vram_total_bytes for g in gpus) if gpus else 0,
+        "vram_free_bytes": sum(g.vram_free_bytes for g in gpus) if gpus else 0,
+        "gpu_util_pct": _max([g.utilization_gpu_pct for g in gpus]),
+        "temperature_c": _max([g.temperature_c for g in gpus]),
+        "power_w": (
+            round(sum(float(g.power_draw_w) for g in gpus if g.power_draw_w is not None), 2)
+            if any(g.power_draw_w is not None for g in gpus)
+            else None
+        ),
+        "ram_available_bytes": getattr(host, "ram_available_bytes", None),
+    }
+
+
+async def _reap_forever(state: "CoordinatorState") -> None:
+    """Mark nodes that stopped heartbeating, on a timer rather than on request.
+
+    Reaping used to require an admin POST, so a dead node stayed HEALTHY until
+    somebody noticed. A node that dies mid-deployment now also fails that
+    deployment, because a stage on a silent node is not running.
+    """
+    interval = max(2.0, state.settings.heartbeat_grace_s / 3.0)
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            changed = state.registry.reap()
+            if changed:
+                affected = state.deployments.mark_unreachable([r for r in changed])
+                if affected:
+                    logger.warning(
+                        "deployments failed after nodes went silent: %s", ", ".join(affected)
+                    )
+        except Exception:  # noqa: BLE001 - a reaper must not kill the loop
+            logger.exception("reaper iteration failed")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    state: CoordinatorState = app.state.mw
+    task = asyncio.create_task(_reap_forever(state))
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
 def create_app(settings: CoordinatorSettings | None = None) -> FastAPI:
     settings = settings or CoordinatorSettings()
     state = CoordinatorState(settings)
@@ -190,6 +298,7 @@ def create_app(settings: CoordinatorSettings | None = None) -> FastAPI:
     state.registry.load_snapshot()
 
     app = FastAPI(
+        lifespan=_lifespan,
         title="MESHWEAVE Coordinator",
         version=__version__,
         description=(
@@ -292,7 +401,11 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         state.workloads.event(
             f"node:{registration.node_id}", "registered", {"node_id": registration.node_id}
         )
+        # A credential the agent keeps and presents when it asks for work. Signed
+        # with the coordinator secret, so verifying it needs no per-node state.
+        node_token = issue_node_token(registration.node_id, state.secret)
         return {
+            "node_token": node_token,
             "node_id": record.node_id,
             "accepted": True,
             "heartbeat_interval_s": state.settings.heartbeat_timeout_s / 3.0,
@@ -307,6 +420,8 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="unregistered node") from exc
         state.registry.recompute_reliability(node_id)
+        buffer = state.series.setdefault(node_id, deque(maxlen=240))
+        buffer.append(_series_sample(record))
         return {
             "ok": True,
             "accepted_at": utcnow().isoformat(),
@@ -491,9 +606,29 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         commands is enforced by the agent, not by this endpoint: it may only
         execute a WorkloadAssignment, never an arbitrary string.
         """
+        # The work queue is the one endpoint that can make a node start a
+        # process, so it is the one that has to be authenticated. A node token
+        # issued at registration proves which node is asking; the shared
+        # enrollment token is still accepted so an agent that predates node
+        # tokens keeps working during an upgrade.
         token = _bearer(authorization)
         if not token:
             raise HTTPException(status_code=401, detail="missing agent token")
+
+        presented_as = verify_node_token(token, state.secret)
+        enrollment = state.settings.enrollment_token
+        if presented_as != node_id and not (
+            enrollment and secrets.compare_digest(token, enrollment)
+        ):
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    "invalid node token; this agent must register to obtain one"
+                    if presented_as is None
+                    else f"token was issued for {presented_as}, not {node_id}"
+                ),
+            )
+
         record = state.registry.get(node_id)
         if record is None:
             raise HTTPException(status_code=404, detail="unknown node")
@@ -511,6 +646,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             # Stages and prompts for the deployments this node takes part in.
             # The agent acts on run_stage, stop_stage and run_prompt only.
             "deployment_commands": state.deployments.commands_for(node_id),
+            "network_commands": state.network.commands_for(node_id),
             "heartbeat_interval_s": state.settings.heartbeat_timeout_s / 3.0,
         }
 
@@ -713,6 +849,66 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         removed = state.deployments.remove(deployment_id)
         return {"deployment_id": deployment_id, "removed": removed}
 
+    # -- network measurement ---------------------------------------------
+    #
+    # Measurement is orchestrated, not dialled: the coordinator tells each node
+    # to listen, then tells each node to probe the others. Both directions are
+    # measured separately, because a link is not symmetric.
+
+    @app.post("/v1/network/measure")
+    async def start_measurement(request: NetworkMeasureRequest) -> dict[str, Any]:
+        for node_id in request.node_ids:
+            if state.registry.get(node_id) is None:
+                raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
+        try:
+            measurement = state.network.start(
+                request.node_ids,
+                {"rtt_count": request.rtt_count, "bulk_bytes": request.bulk_bytes},
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if measurement.phase == "failed":
+            raise HTTPException(status_code=409, detail=measurement.error)
+        return measurement.to_dict()
+
+    @app.get("/v1/network/measurements")
+    async def list_measurements() -> dict[str, Any]:
+        items = []
+        for measurement in state.network.all():
+            summary = measurement.to_dict()
+            summary.pop("results", None)
+            items.append(summary)
+        return {"measurements": items}
+
+    @app.get("/v1/network/measurements/{measurement_id}")
+    async def get_measurement(measurement_id: str) -> dict[str, Any]:
+        measurement = state.network.get(measurement_id)
+        if measurement is None:
+            raise HTTPException(status_code=404, detail="unknown measurement")
+        return measurement.to_dict()
+
+    @app.post("/v1/nodes/{node_id}/network-result")
+    async def report_network(
+        node_id: str, report: NetworkProbeReport
+    ) -> dict[str, Any]:
+        if state.registry.get(node_id) is None:
+            raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
+        measurement = state.network.record(
+            node_id, report.measurement_id, report.phase, report.payload
+        )
+        if measurement is None:
+            raise HTTPException(status_code=404, detail="unknown measurement")
+
+        if measurement.phase == "done":
+            matrix = state.network.topology(measurement)
+            if matrix is not None:
+                state.set_topology(matrix)
+        return {
+            "measurement_id": measurement.measurement_id,
+            "phase": measurement.phase,
+            "complete": measurement.complete,
+        }
+
     # -- metrics / evidence ---------------------------------------------
 
     @app.get("/v1/readiness")
@@ -748,6 +944,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                     "gpu_name": gpus[0].name if gpus else None,
                     "vram_gib": round(vram, 1),
                     "can_host": bool(gpus) and record.status.value == "HEALTHY",
+                    "availability": _availability(record, state.deployments),
                     "agent_version": inv.agent_version if inv else None,
                     "cpu_cores": host.cpu_cores if host else None,
                     "cpu_model": host.cpu_model if host else None,
@@ -916,6 +1113,27 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             raise HTTPException(
                 status_code=500, detail=f"report unreadable: {exc}"
             ) from exc
+
+    @app.get("/v1/nodes/{node_id}/series")
+    async def node_series(node_id: str, limit: int = 120) -> dict[str, Any]:
+        """Recent telemetry for one node.
+
+        Session-only: this is what the coordinator saw while it was running, not
+        a persisted time series, and the response says so rather than implying
+        history it does not have.
+        """
+        if state.registry.get(node_id) is None:
+            raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
+        samples = list(state.series.get(node_id, deque()))[-max(1, min(limit, 240)):]
+        return {
+            "node_id": node_id,
+            "samples": samples,
+            "count": len(samples),
+            "retention": (
+                "in memory only; cleared when the coordinator restarts, and one "
+                "sample per heartbeat"
+            ),
+        }
 
     @app.get("/v1/nodes/{node_id}")
     async def get_node(node_id: str) -> dict[str, Any]:

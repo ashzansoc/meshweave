@@ -151,6 +151,7 @@ def main() -> int:
         rank0_port = free_port()
         rank1_port = free_port()
         ctl = root / "split.sock"
+        stage_token = "test-stage-token"
         stage0 = start(
             [
                 "--model-dir", str(model_dir),
@@ -160,6 +161,7 @@ def main() -> int:
                 "--next", f"127.0.0.1:{rank1_port}",
                 "--device", "cpu", "--dtype", "float32",
                 "--control", str(ctl),
+                "--stage-token", stage_token,
             ],
             root / "stage0.log",
         )
@@ -171,6 +173,7 @@ def main() -> int:
                 "--listen", f"0.0.0.0:{rank1_port}",
                 "--reply", f"127.0.0.1:{rank0_port}",
                 "--device", "cpu", "--dtype", "float32",
+                "--stage-token", stage_token,
             ],
             root / "stage1.log",
         )
@@ -197,7 +200,21 @@ def main() -> int:
     same_tokens = one["result"]["output_tokens"] == two["result"]["output_tokens"]
     print()
     print(f"identical output: {same and same_tokens}")
-    return 0 if same and same_tokens else 1
+
+    # The distributed run must show the evidence, not just the same text.
+    split = two["result"]
+    print(f"  world={split.get('world')} rank={split.get('rank')}"
+          f" activation_bytes_sent={split.get('activation_bytes_sent')}"
+          f" per_token={split.get('activation_bytes_per_token')}"
+          f" stage_roundtrip_ms={split.get('stage_roundtrip_ms')}")
+    evidence = (
+        split.get("world") == 2
+        and int(split.get("activation_bytes_sent") or 0) > 0
+        and split.get("stage_roundtrip_ms") is not None
+        and one["result"].get("world") == 1
+    )
+    print(f"  distributed evidence present: {evidence}")
+    return 0 if (same and same_tokens and evidence) else 1
 
 
 if __name__ == "__main__":

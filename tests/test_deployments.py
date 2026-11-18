@@ -46,7 +46,7 @@ def node(
     mapped: dict[int, int] | None = None,
     external_ip: str | None = "203.0.113.9",
     gpus: int = 1,
-    agent_version: str = "0.3.0",
+    agent_version: str = "0.4.0",
 ) -> NodeRecord:
     inventory = GpuInventory(
         gpus=[
@@ -277,20 +277,20 @@ def test_an_agent_that_cannot_poll_is_refused_with_the_version() -> None:
     with pytest.raises(DeploymentRejected) as excinfo:
         plan_deployment(
             model="Qwen/Qwen2.5-0.5B-Instruct",
-            records=[node("old", mapped={10100: 41000}, agent_version="0.2.0")],
+            records=[node("old", mapped={10100: 41000}, agent_version="0.3.0")],
             config=config,
         )
     message = str(excinfo.value)
-    assert "0.2.0" in message and "0.3.0" in message and "installer" in message
+    assert "0.3.0" in message and "0.4.0" in message and "installer" in message
 
 
 def test_the_version_comparison_is_numeric_not_lexical() -> None:
     from meshweave.coordinator.deployments import agent_can_deploy
 
-    assert agent_can_deploy("0.3.0")
+    assert agent_can_deploy("0.4.0")
     assert agent_can_deploy("0.10.1")
     assert agent_can_deploy("1.0.0")
-    assert not agent_can_deploy("0.2.9")
+    assert not agent_can_deploy("0.3.9")
     assert not agent_can_deploy(None)
 
 

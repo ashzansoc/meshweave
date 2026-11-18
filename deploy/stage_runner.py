@@ -148,7 +148,9 @@ def build_stage(
 # --------------------------------------------------------------------------- #
 
 
-def dial(host: str, port: int, role: str, *, timeout: float = 180.0) -> socket.socket:
+def dial(
+    host: str, port: int, role: str, *, token: str | None = None, timeout: float = 180.0
+) -> socket.socket:
     """Connect to a peer, retrying while it is still starting up.
 
     A socket is created per attempt. Reusing one across retries is a trap: after
@@ -162,7 +164,7 @@ def dial(host: str, port: int, role: str, *, timeout: float = 180.0) -> socket.s
         shell.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         try:
             shell.connect((host, port))
-            send_frame(shell, {"kind": "hello", "role": role})
+            send_frame(shell, {"kind": "hello", "role": role, "token": token})
             log(f"connected to {host}:{port} as {role}")
             return shell
         except OSError:
@@ -182,8 +184,15 @@ def listen(host: str, port: int) -> socket.socket:
     return server
 
 
-def accept_as(server: socket.socket, role: str, *, timeout: float = 180.0) -> socket.socket:
-    """Accept until a peer declares the role we are waiting for."""
+def accept_as(
+    server: socket.socket, role: str, *, token: str | None = None, timeout: float = 180.0
+) -> socket.socket:
+    """Accept until a peer declares the role we are waiting for.
+
+    When a stage token is configured, a peer that does not present it is refused.
+    The stage port is published to the internet, so this is what stops a stranger
+    from feeding activations into a running pipeline.
+    """
     server.settimeout(timeout)
     while True:
         conn, addr = server.accept()
@@ -193,6 +202,10 @@ def accept_as(server: socket.socket, role: str, *, timeout: float = 180.0) -> so
             conn.close()
             continue
         if header.get("role") != role:
+            conn.close()
+            continue
+        if token and header.get("token") != token:
+            log(f"refused {role} from {addr[0]}:{addr[1]}: bad stage token")
             conn.close()
             continue
         log(f"accepted {role} from {addr[0]}:{addr[1]}")
@@ -223,7 +236,7 @@ class ChainStage:
                 if kind == "forward":
                     hidden = _decode(payload, header)
                     result = self.stage.forward(hidden, position_offset=int(header["pos"]))
-                    self._send_forward(result.hidden, int(header["pos"]), header["req"])
+                    self._send_forward(result.hidden, int(header["pos"]), header["req"], header)
                 elif kind == "reset":
                     self.stage.reset()
                     send_frame(self.downstream, {"kind": "reset"})
@@ -242,19 +255,25 @@ class ChainStage:
             raise RuntimeError("no upstream connection bound")
         return self.upstream
 
-    def _send_forward(self, hidden: torch.Tensor, pos: int, req: str) -> None:
+    def _send_forward(
+        self, hidden: torch.Tensor, pos: int, req: str, header: dict | None = None
+    ) -> None:
         payload = hidden.contiguous().to(torch.float16).numpy().tobytes()
-        send_frame(
-            self.downstream,
-            {
-                "kind": "forward",
-                "req": req,
-                "pos": pos,
-                "shape": list(hidden.shape),
-                "dtype": "float16",
-            },
-            payload,
-        )
+        outgoing = {
+            "kind": "forward",
+            "req": req,
+            "pos": pos,
+            "shape": list(hidden.shape),
+            "dtype": "float16",
+        }
+        # Carry the sampler settings through. Rebuilding the header without them
+        # reset temperature and top_p to their defaults at every middle stage, so
+        # sampling survived only a two-stage deployment.
+        if header:
+            for key in ("temperature", "top_p"):
+                if key in header:
+                    outgoing[key] = header[key]
+        send_frame(self.downstream, outgoing, payload)
 
 
 class LastStage(ChainStage):
@@ -307,10 +326,20 @@ def _decode(payload: bytes, header: dict) -> torch.Tensor:
 
 
 class RankZero:
-    def __init__(self, stage: DenseStage, tokenizer, downstream: socket.socket | None):
+    def __init__(
+        self,
+        stage: DenseStage,
+        tokenizer,
+        downstream: socket.socket | None,
+        *,
+        world: int = 1,
+        rank: int = 0,
+    ):
         self.stage = stage
         self.tokenizer = tokenizer
         self.downstream = downstream
+        self.world = world
+        self.rank = rank
         self.returns: queue.Queue[dict] = queue.Queue()
         self.lock = threading.Lock()
         self._counter = 0
@@ -361,10 +390,15 @@ class RankZero:
         generated: list[int] = []
         ttft_ms: float | None = None
         step_times: list[float] = []
+        round_trips: list[float] = []
+        bytes_sent = 0
 
         hidden = self.stage.embed(torch.tensor([input_ids], dtype=torch.long, device=self.stage.device))
         position = 0
+        hop_start = time.perf_counter()
         result = self._forward(hidden, position, req, temperature, top_p)
+        round_trips.append((time.perf_counter() - hop_start) * 1000.0)
+        bytes_sent += hidden.numel() * 2  # fp16 on the wire
         position += len(input_ids)
         step_start = time.perf_counter()
 
@@ -381,7 +415,10 @@ class RankZero:
             token_hidden = self.stage.embed(
                 torch.tensor([[token]], dtype=torch.long, device=self.stage.device)
             )
+            hop_start = time.perf_counter()
             result = self._forward(token_hidden, position, req, temperature, top_p)
+            round_trips.append((time.perf_counter() - hop_start) * 1000.0)
+            bytes_sent += token_hidden.numel() * 2
             position += 1
             now = time.perf_counter()
             step_times.append((now - step_start) * 1000.0)
@@ -389,6 +426,7 @@ class RankZero:
 
         total_s = time.perf_counter() - started
         text = self.tokenizer.decode(generated)
+        decode_round_trips = round_trips[1:] if len(round_trips) > 1 else round_trips
         return {
             "prompt": prompt,
             "text": text,
@@ -398,6 +436,20 @@ class RankZero:
             "ms_per_token": round(sum(step_times) / len(step_times), 1) if step_times else None,
             "total_s": round(total_s, 3),
             "tokens_per_second": round(len(generated) / total_s, 3) if total_s > 0 else None,
+            # Evidence that a distributed step really is distributed: the round
+            # trip covers every stage plus both network hops, and bytes_sent is
+            # the activation payload this stage actually put on the wire.
+            "stage_roundtrip_ms": (
+                round(sum(decode_round_trips) / len(decode_round_trips), 1)
+                if decode_round_trips
+                else None
+            ),
+            "activation_bytes_sent": bytes_sent,
+            "activation_bytes_per_token": (
+                round(bytes_sent / max(1, len(generated)), 1) if generated else None
+            ),
+            "world": self.world,
+            "rank": self.rank,
         }
 
     def _forward(
@@ -511,6 +563,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--dtype", default="bfloat16", choices=sorted(DTYPES))
     ap.add_argument("--max-seq", type=int, default=2048)
+    ap.add_argument(
+        "--stage-token",
+        default=None,
+        help="shared secret each stage must present in its hello frame",
+    )
     return ap.parse_args(argv)
 
 
@@ -538,7 +595,7 @@ def main(argv: list[str] | None = None) -> int:
         tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
 
     if args.world == 1:
-        engine = RankZero(stage, tokenizer, None)
+        engine = RankZero(stage, tokenizer, None, world=args.world, rank=args.rank)
         log("single stage: generation runs locally")
         serve_control(Path(args.control), engine, None)
         return 0
@@ -546,26 +603,26 @@ def main(argv: list[str] | None = None) -> int:
     server = listen(*parse_host_port(args.listen))
 
     if args.rank == args.world - 1:
-        reply = dial(*parse_host_port(args.reply), role="return")
+        reply = dial(*parse_host_port(args.reply), role="return", token=args.stage_token)
         chain = LastStage(stage, None, reply)
-        chain.bind_upstream(accept_as(server, "forward"))
+        chain.bind_upstream(accept_as(server, "forward", token=args.stage_token))
         threading.Thread(target=chain.loop, daemon=True).start()
         log("last stage ready: sampling tokens and returning them to rank 0")
         threading.Event().wait()
         return 0
 
     if args.rank == 0:
-        downstream = dial(*parse_host_port(args.next_addr), role="forward")
-        engine = RankZero(stage, tokenizer, downstream)
-        engine.start_return_reader(accept_as(server, "return"))
+        downstream = dial(*parse_host_port(args.next_addr), role="forward", token=args.stage_token)
+        engine = RankZero(stage, tokenizer, downstream, world=args.world, rank=args.rank)
+        engine.start_return_reader(accept_as(server, "return", token=args.stage_token))
         log("rank 0 ready: runnable")
         serve_control(Path(args.control), engine, None)
         return 0
 
     # A middle stage: it accepts from the stage before it and dials the next one.
-    downstream = dial(*parse_host_port(args.next_addr), role="forward")
+    downstream = dial(*parse_host_port(args.next_addr), role="forward", token=args.stage_token)
     chain = ChainStage(stage, downstream)
-    chain.bind_upstream(accept_as(server, "forward"))
+    chain.bind_upstream(accept_as(server, "forward", token=args.stage_token))
     threading.Thread(target=chain.loop, daemon=True).start()
     log(f"stage {args.rank} ready")
     threading.Event().wait()

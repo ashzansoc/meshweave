@@ -114,3 +114,48 @@ def fingerprint_cert(cert_pem: str) -> str:
     cert = x509.load_pem_x509_certificate(cert_pem.encode())
     der = cert.public_bytes(__import__("cryptography").hazmat.primitives.serialization.Encoding.DER)
     return hashlib.sha256(der).hexdigest()
+
+
+# --------------------------------------------------------------------------- #
+# node tokens
+#
+# A node credential that proves "I am this node" without the coordinator having
+# to hand out certificates in a container we cannot administer. It is signed with
+# the coordinator secret, so it is stateless to verify and survives a restart.
+#
+# It has no expiry. A POC that runs for a week does not need rotation, and a
+# token that silently expires would take a node offline for no operational gain.
+# That is a deliberate limitation, recorded in docs/LIMITATIONS.md.
+# --------------------------------------------------------------------------- #
+
+NODE_TOKEN_PREFIX = "n1"
+
+
+def issue_node_token(node_id: str, secret: bytes, issued_at: int | None = None) -> str:
+    issued = int(issued_at if issued_at is not None else time.time())
+    body = f"{NODE_TOKEN_PREFIX}.{node_id}.{issued}"
+    signature = hmac.new(secret, body.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{body}.{signature}".encode()).decode().rstrip("=")
+
+
+def verify_node_token(token: str, secret: bytes) -> str | None:
+    """Return the node id this token was issued for, or None if it is not ours."""
+    if not token:
+        return None
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        decoded = base64.urlsafe_b64decode(padded.encode()).decode()
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
+
+    parts = decoded.split(".")
+    if len(parts) != 4 or parts[0] != NODE_TOKEN_PREFIX or not parts[2].isdigit():
+        return None
+
+    _, node_id, issued, signature = parts
+    expected = hmac.new(
+        secret, f"{NODE_TOKEN_PREFIX}.{node_id}.{issued}".encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return None
+    return node_id

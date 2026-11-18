@@ -263,6 +263,10 @@ class ResourceRegistry:
                     record.status = NodeStatus.UNREACHABLE
                     record.missed_heartbeats += 1
                     changed.append(node_id)
+            if changed:
+                # Without this the reaped state lived only in memory and a
+                # restart quietly resurrected a dead node as HEALTHY.
+                self._save_unlocked()
         return changed
 
     def reliability(self, node_id: str) -> float | None:
