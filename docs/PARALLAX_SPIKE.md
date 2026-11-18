@@ -18,6 +18,13 @@ curl -fsSL https://raw.githubusercontent.com/ashzansoc/meshweave/main/deploy/par
   | sudo bash
 ```
 
+**Install method matters.** Parallax is not published on PyPI under this name —
+the `parallax` package there is an unrelated SSH fan-out tool (krig/parallax,
+v1.0.6). The supported install is a clone plus the project's own `./install.sh`,
+which uses `uv` to create the venv. An earlier revision of this script used
+`pip install parallax` and therefore tested entirely the wrong software; that run
+is discarded and must be repeated.
+
 It is deliberately contained:
 
 * installs into `/opt/parallax-spike/venv`, never touching `/opt/meshweave`

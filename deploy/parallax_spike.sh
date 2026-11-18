@@ -5,6 +5,12 @@
 # Everything else about it is documented; this is the part that cannot be read
 # from source.
 #
+# Install note: Parallax is NOT on PyPI under this name. The `parallax` package
+# on PyPI is an unrelated SSH fan-out tool (krig/parallax). The supported install
+# is a git clone plus the project's own ./install.sh, which creates a venv with
+# uv. An earlier version of this script used `pip install parallax` and therefore
+# tested the wrong software entirely.
+#
 # Contained by design:
 #   * installs into /opt/parallax-spike, never touching /opt/meshweave
 #   * runs a single node, so nothing is published and no peer traffic is needed
@@ -17,10 +23,13 @@
 set -euo pipefail
 
 ROOT="/opt/parallax-spike"
-VENV="$ROOT/venv"
+SRC="$ROOT/src"
+VENV="$SRC/.venv"
+REF="${MESHWEAVE_SPIKE_REF:-v0.1.2}"
 MODEL="${MESHWEAVE_SPIKE_MODEL:-Qwen/Qwen2.5-0.5B-Instruct}"
 RESULT="/var/log/parallax-spike.json"
 PORT="${MESHWEAVE_SPIKE_PORT:-3000}"
+URL="https://github.com/GradientHQ/parallax.git"
 
 log()  { printf '\033[0;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[0;33m[!]\033[0m %s\n' "$*"; }
@@ -41,48 +50,12 @@ if [ "${1:-}" = "--uninstall" ]; then
 fi
 
 [ "$(uname -s)" = "Linux" ] || die "this spike targets Linux; got $(uname -s)"
-command -v python3 >/dev/null 2>&1 || die "python3 is required"
+command -v git >/dev/null 2>&1 || die "git is required to clone Parallax"
 
 mkdir -p "$ROOT"
+cd "$ROOT"
 
-# ── 1. Is there a GPU we can test? ────────────────────────────────────────
-if ! command -v nvidia-smi >/dev/null 2>&1; then
-  warn "no nvidia-smi; this machine cannot answer the Turing question"
-fi
-
-# ── 2. Isolated environment ───────────────────────────────────────────────
-if [ ! -x "$VENV/bin/python" ]; then
-  log "creating an isolated environment at $VENV"
-  python3 -m venv "$VENV"
-fi
-"$VENV/bin/python" -m pip install --quiet --upgrade pip >/dev/null 2>&1 || true
-
-log "installing Parallax (this pulls vLLM and Lattica; it can take a while)"
-if ! "$VENV/bin/python" -m pip install --quiet "parallax" 2>"$ROOT/install.err"; then
-  warn "install failed; first lines of the error:"
-  head -20 "$ROOT/install.err" | sed 's/^/    /'
-  python3 - "$ROOT" "$MODEL" <<'PY'
-import json, sys, datetime
-root, model = sys.argv[1], sys.argv[2]
-json.dump({
-    "tested_at": datetime.datetime.now(datetime.UTC).isoformat(),
-    "model": model,
-    "stage": "install",
-    "ok": False,
-    "error": "pip install failed; see /opt/parallax-spike/install.err",
-}, open("/var/log/parallax-spike.json", "w"), indent=2)
-PY
-  die "could not install Parallax"
-fi
-
-VERSION="$("$VENV/bin/python" -c 'from importlib.metadata import version; print(version("parallax"))' 2>/dev/null || echo "unknown (import failed)")"
-log "installed Parallax $VERSION"
-if ! "$VENV/bin/parallax" --help >/dev/null 2>&1; then
-  warn "the 'parallax' command is not usable in the venv"
-fi
-
-# ── 3. Start a single node ────────────────────────────────────────────────
-# Single node only: no --join, no published peer ports, no scheduler.
+# ── 1. Stop a previous server ─────────────────────────────────────────────
 if [ -f "$ROOT/parallax.pid" ]; then
   old_pid="$(cat "$ROOT/parallax.pid" 2>/dev/null || true)"
   if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null \
@@ -94,12 +67,29 @@ if [ -f "$ROOT/parallax.pid" ]; then
   rm -f "$ROOT/parallax.pid"
 fi
 
+# ── 2. Fetch and install ──────────────────────────────────────────────────
+if [ ! -d "$SRC/.git" ]; then
+  log "cloning Parallax $REF"
+  git clone --quiet --depth 1 --branch "$REF" "$URL" "$SRC" 2>"$ROOT/clone.err" \
+    || { warn "clone failed:"; head -5 "$ROOT/clone.err" | sed 's/^/    /'; \
+         python3 -c "import json,sys; json.dump({'stage':'clone','ok':False,'error':'clone failed'}, open('/var/log/parallax-spike.json','w'))"; exit 1; }
+fi
+
+if [ ! -x "$VENV/bin/parallax" ]; then
+  log "running the project installer (creates $VENV with uv)"
+  ( cd "$SRC" && ./install.sh --extras gpu ) >"$ROOT/install.log" 2>&1 \
+    || { warn "install failed; last lines:"; tail -20 "$ROOT/install.log" | sed 's/^/    /'; \
+         python3 -c "import json; json.dump({'stage':'install','ok':False,'error':'install.sh failed'}, open('/var/log/parallax-spike.json','w'))"; exit 1; }
+fi
+
+VERSION="$("$VENV/bin/parallax" --version 2>/dev/null | head -1 || echo unknown)"
+log "installed Parallax $VERSION"
+
+# ── 3. Start a single node ────────────────────────────────────────────────
 cd "$ROOT"
-set +e
 "$VENV/bin/parallax" serve -m "$MODEL" --dtype float16 --host 127.0.0.1 --port "$PORT" \
   > "$ROOT/server.log" 2>&1 &
 SERVER_PID=$!
-set -e
 echo "$SERVER_PID" > "$ROOT/parallax.pid"
 log "started the server (pid $SERVER_PID); waiting for it to load"
 
@@ -122,7 +112,7 @@ else
 fi
 
 # ── 4. Record the outcome ─────────────────────────────────────────────────
-python3 - "$ROOT" "$MODEL" "$VERSION" "$READY" <<'PY'
+python3 - "$ROOT" "$MODEL" "$VERSION" "$READY" <<'SPIKE_PY'
 import json, sys, datetime, subprocess
 root, model, version, ready = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
 
@@ -143,17 +133,15 @@ result = {
     "server_ready": ready,
     "ok": False,
 }
-chat = f"{root}/result.json"
 try:
-    payload = json.load(open(chat))
+    payload = json.load(open(f"{root}/result.json"))
     result["response"] = payload
     choices = payload.get("choices") or []
     result["text"] = choices[0]["message"]["content"] if choices else None
     result["ok"] = bool(result["text"])
 except Exception:
-    err = f"{root}/chat.err"
     try:
-        result["error"] = open(err).read()[:600]
+        result["error"] = open(f"{root}/chat.err").read()[:600]
     except Exception:
         result["error"] = "no response and no error captured"
 
@@ -164,7 +152,7 @@ except Exception:
 
 json.dump(result, open("/var/log/parallax-spike.json", "w"), indent=2)
 print(json.dumps({k: result[k] for k in ("ok", "server_ready", "text") if k in result}, indent=2))
-PY
+SPIKE_PY
 
 log "result written to $RESULT"
 
@@ -172,7 +160,7 @@ if grep -q '"ok": true' "$RESULT" 2>/dev/null; then
   log "SPIKE PASSED: Parallax runs this model on this GPU"
 else
   warn "SPIKE FAILED or inconclusive"
-  "$VENV/bin/python" - "$RESULT" <<'SPIKE_PY'
+  python3 - "$RESULT" <<'DIAG_PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 if d.get("error"):
@@ -183,7 +171,7 @@ if d.get("server_log_tail"):
     print("  server log (last lines):")
     for line in str(d["server_log_tail"]).splitlines()[-12:]:
         print("   ", line)
-SPIKE_PY
+DIAG_PY
 fi
 
 if [ -f "$ROOT/parallax.pid" ]; then
