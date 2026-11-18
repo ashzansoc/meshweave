@@ -418,6 +418,19 @@ def write_pid_file() -> None:
 # --------------------------------------------------------------------------- #
 
 
+def _nvml_safe(fn, *args, default=None):
+    """Call an NVML counter, returning ``default`` when the driver lacks it.
+
+    Module level on purpose: the driver version is system-wide and has to be
+    readable before any device handle exists. Defining the helper inside the
+    device loop made that read a NameError, which surfaced as "no GPUs".
+    """
+    try:
+        return fn(*args)
+    except Exception:  # noqa: BLE001 - an unsupported counter is not an error
+        return default
+
+
 def gpu_inventory() -> list[dict]:
     """Read every GPU via NVML. Raises if the driver is absent."""
     try:
@@ -430,25 +443,17 @@ def gpu_inventory() -> list[dict]:
 
     pynvml.nvmlInit()
     try:
-        # System-wide, so it takes no device handle. Passing one raised and was
-        # swallowed by opt(), which reported the driver version as unknown.
-        driver = opt(pynvml.nvmlSystemGetDriverVersion)
+        # System-wide, so it takes no device handle. Reading it with the
+        # per-device helper was a NameError, which the outer handler turned into
+        # "no GPUs" on every node.
+        driver = _nvml_safe(pynvml.nvmlSystemGetDriverVersion)
         if isinstance(driver, bytes):
             driver = driver.decode()
+
         count = pynvml.nvmlDeviceGetCount()
         gpus = []
         for i in range(count):
             h = pynvml.nvmlDeviceGetHandleByIndex(i)
-
-            # Bind the handle as a default argument. A closure over the loop
-            # variable would capture the *last* device for every GPU, so a
-            # multi-GPU host would report one card's counters N times.
-            def opt(fn, _handle=h, default=None):
-                try:
-                    return fn(_handle)
-                except Exception:  # noqa: BLE001 - unsupported counter
-                    return default
-
             mem = pynvml.nvmlDeviceGetMemoryInfo(h)
             name = pynvml.nvmlDeviceGetName(h)
             if isinstance(name, bytes):
@@ -457,10 +462,10 @@ def gpu_inventory() -> list[dict]:
             if isinstance(uuid, bytes):
                 uuid = uuid.decode()
 
-            util = opt(pynvml.nvmlDeviceGetUtilizationRates)
-            power = opt(pynvml.nvmlDeviceGetPowerUsage)
-            temp = opt(pynvml.nvmlDeviceGetTemperature)
-            capability = opt(pynvml.nvmlDeviceGetCudaComputeCapability)
+            util = _nvml_safe(pynvml.nvmlDeviceGetUtilizationRates, h)
+            power = _nvml_safe(pynvml.nvmlDeviceGetPowerUsage, h)
+            temp = _nvml_safe(pynvml.nvmlDeviceGetTemperature, h)
+            capability = _nvml_safe(pynvml.nvmlDeviceGetCudaComputeCapability, h)
 
             gpus.append(
                 {
