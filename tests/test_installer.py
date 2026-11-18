@@ -12,6 +12,8 @@ Two failure modes are covered here, both of which have already happened once:
 from __future__ import annotations
 
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -182,3 +184,33 @@ def test_installer_keeps_the_name_a_legacy_install_already_used() -> None:
     text = INSTALL_SH.read_text()
     assert 'CONFIG_DIR/agent.json' in text
     assert 'node_id") or ""' in text
+
+
+def test_the_helpers_the_installer_needs_are_defined() -> None:
+    """`log()` was deleted by an edit once, and the installer then failed on its
+    first log line on every host. Presence is cheap to assert; the behavioural
+    check is in the test below."""
+    defined = set(re.findall(r"^(\w+)\(\)\s*\{", INSTALL_SH.read_text(), re.M))
+    for required in ("log", "warn", "die", "_pid_cmdline", "_stop_existing_agent"):
+        assert required in defined, f"{required}() is called but not defined"
+
+
+def test_the_helpers_can_be_sourced_and_called() -> None:
+    """Proves the definitions are valid shell, not just present as text."""
+    text = INSTALL_SH.read_text()
+    end = next(i for i, line in enumerate(text.splitlines()) if "this installer targets Linux" in line)
+    body = "\n".join(text.splitlines()[:end])
+    with tempfile.TemporaryDirectory() as tmp:
+        defs = Path(tmp) / "defs.sh"
+        defs.write_text(body)
+        harness = Path(tmp) / "t.sh"
+        harness.write_text(
+            f'set -euo pipefail\nsource "{defs}"\nlog "ok"\nwarn "ok"\n'
+            "echo \"pidfile=$PID_FILE\"\n"
+        )
+        result = subprocess.run(
+            ["bash", str(harness)], capture_output=True, text=True, timeout=30
+        )
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout
+    assert "/var/run/meshweave-agent.pid" in result.stdout

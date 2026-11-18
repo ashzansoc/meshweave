@@ -113,6 +113,7 @@ _stop_existing_agent() {
     sleep 1
   fi
 }
+log()  { printf '\033[0;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[0;33m[!]\033[0m %s\n' "$*"; }
 die()  { printf '\033[0;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
