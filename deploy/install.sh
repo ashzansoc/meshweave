@@ -1309,7 +1309,10 @@ def main() -> int:
     # Heartbeats can be slow; the work poll cannot. A prompt that waits for the
     # next heartbeat before anyone notices it adds seconds to every short request
     # and makes the coordinator look slow when it is the agent that was asleep.
-    work_interval = float(os.environ.get("MESHWEAVE_WORK_POLL_S", "1.0"))
+    # 250 ms: a poll is one cheap GET, and a second of it is a second added to
+    # every request. Measured: four replicas finished four requests in 2.5 s of
+    # which ~1 s was waiting to be noticed.
+    work_interval = float(os.environ.get("MESHWEAVE_WORK_POLL_S", "0.25"))
     next_heartbeat = 0.0
     while True:
         time.sleep(work_interval)

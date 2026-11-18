@@ -231,6 +231,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--nodes", nargs="+", required=True)
     parser.add_argument("--mode", default="AUTO", choices=["AUTO", "PIPELINE", "REPLICA"])
+    parser.add_argument(
+        "--replicas-per-node",
+        type=int,
+        default=1,
+        help="copies of the model on each node (REPLICA mode only)",
+    )
     parser.add_argument("--concurrency", nargs="+", type=int, default=[1, 2, 4, 8, 16])
     parser.add_argument("--prompt", default="The capital of France is")
     parser.add_argument("--tokens", type=int, default=32)
@@ -255,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
             "model": args.model,
             "node_ids": args.nodes,
             "mode": args.mode,
+            "replicas_per_node": args.replicas_per_node,
             "max_seq": 2048,
         },
         timeout=120.0,
