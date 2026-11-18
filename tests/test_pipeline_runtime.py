@@ -10,6 +10,7 @@ completed.
 from __future__ import annotations
 
 import importlib.util
+import re
 import json
 from argparse import Namespace
 from pathlib import Path
@@ -145,3 +146,28 @@ def test_a_missing_checkpoint_file_is_reported(tmp_path: Path) -> None:
 
     with pytest.raises(ModelLoadError):
         runner.build_stage(_args(None), config, tmp_path)
+
+
+def test_activations_are_moved_to_host_before_serialising() -> None:
+    """A CUDA tensor cannot be read by numpy.
+
+    This raised on the first real two-node request; the CPU-only pipeline test
+    could not see it. The guard is structural: the wire conversion is the only
+    place that touches numpy, and it must move to host memory first.
+    """
+    source = (REPO / "deploy" / "stage_runner.py").read_text()
+    body = re.search(r"def _to_wire\(.*?\n(?=\ndef |\nclass )", source, re.S)
+    assert body, "_to_wire not found"
+    code = body.group(0)
+    assert ".cpu()" in code
+    assert code.index(".cpu()") < code.index(".numpy()")
+    assert ".detach()" in code
+
+
+def test_decoded_activations_are_placed_on_a_device() -> None:
+    """The stage's weights are on the GPU; a host tensor fails at the first
+    matmul, and only when the stage is not the one that produced it."""
+    source = (REPO / "deploy" / "stage_runner.py").read_text()
+    body = re.search(r"def _decode\(.*?\n(?=\ndef |\nclass )", source, re.S)
+    assert body, "_decode not found"
+    assert ".to(device)" in body.group(0)

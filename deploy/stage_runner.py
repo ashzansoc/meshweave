@@ -239,7 +239,9 @@ class ChainStage:
                 header, payload = recv_frame(self._incoming())
                 kind = header.get("kind")
                 if kind == "forward":
-                    hidden = _decode(payload, header)
+                    # The payload arrives on the host; this stage's weights are
+                    # on the GPU, so move it before the first matmul.
+                    hidden = _decode(payload, header, self.stage.device)
                     result = self.stage.forward(hidden, position_offset=int(header["pos"]))
                     self._send_forward(result.hidden, int(header["pos"]), header["req"], header)
                 elif kind == "reset":
@@ -263,7 +265,7 @@ class ChainStage:
     def _send_forward(
         self, hidden: torch.Tensor, pos: int, req: str, header: dict | None = None
     ) -> None:
-        payload = hidden.contiguous().to(torch.float16).numpy().tobytes()
+        payload = _to_wire(hidden)
         outgoing = {
             "kind": "forward",
             "req": req,
@@ -294,7 +296,7 @@ class LastStage(ChainStage):
                 header, payload = recv_frame(self._incoming())
                 kind = header.get("kind")
                 if kind == "forward":
-                    hidden = _decode(payload, header)
+                    hidden = _decode(payload, header, self.stage.device)
                     result = self.stage.forward(hidden, position_offset=int(header["pos"]))
                     if result.logits is None:
                         raise FramingError("last stage produced no logits")
@@ -317,12 +319,26 @@ class LastStage(ChainStage):
             log(f"upstream closed: {exc}")
 
 
-def _decode(payload: bytes, header: dict) -> torch.Tensor:
+def _decode(payload: bytes, header: dict, device: torch.device) -> torch.Tensor:
+    """Rebuild an activation and put it on the device that owns the weights.
+
+    The move belongs here rather than at each call site, because forgetting it
+    fails only on a GPU: a CPU stage happens to work either way.
+    """
     import numpy as np
 
     shape = tuple(int(v) for v in header["shape"])
     array = np.frombuffer(payload, dtype=np.float16).reshape(shape)
-    return torch.from_numpy(array.copy())
+    return torch.from_numpy(array.copy()).to(device)
+
+
+def _to_wire(tensor: torch.Tensor) -> bytes:
+    """Serialise an activation for the next stage.
+
+    Detach, move to host, narrow to fp16. numpy cannot read a CUDA tensor, so the
+    .cpu() is not optional -- it raised on the first real two-node request.
+    """
+    return tensor.detach().cpu().contiguous().to(torch.float16).numpy().tobytes()
 
 
 # --------------------------------------------------------------------------- #
@@ -469,7 +485,7 @@ class RankZero:
                 raise RuntimeError("single-stage run has no head")
             return sample_token(result.logits, temperature=temperature, top_p=top_p)
 
-        payload = result.hidden.contiguous().to(torch.float16).numpy().tobytes()
+        payload = _to_wire(result.hidden)
         send_frame(
             self.downstream,
             {
