@@ -32,6 +32,21 @@ INSTALL_DIR="/opt/meshweave"
 CONFIG_DIR="/etc/meshweave"
 SERVICE_NAME="meshweave-agent"
 
+_start_detached() {
+  log "starting the agent as a detached background process"
+  mkdir -p /var/log
+  setsid nohup python3 "$INSTALL_DIR/agent.py" \
+      > "/var/log/$SERVICE_NAME.log" 2>&1 < /dev/null &
+  echo $! > "/var/run/$SERVICE_NAME.pid"
+  sleep 3
+  if kill -0 "$(cat /var/run/$SERVICE_NAME.pid)" 2>/dev/null; then
+    log "agent running, pid $(cat /var/run/$SERVICE_NAME.pid)"
+    log "logs: tail -f /var/log/$SERVICE_NAME.log"
+  else
+    warn "agent did not stay running; check /var/log/$SERVICE_NAME.log"
+  fi
+}
+
 log()  { printf '\033[0;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[0;33m[!]\033[0m %s\n' "$*"; }
 die()  { printf '\033[0;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
@@ -55,9 +70,19 @@ done
 
 if [ "${UNINSTALL:-0}" = "1" ]; then
   log "removing MESHWEAVE agent"
+  if [ -f "/var/run/$SERVICE_NAME.pid" ]; then
+    pid=$(cat "/var/run/$SERVICE_NAME.pid")
+    kill -TERM "$pid" 2>/dev/null && log "stopped detached agent (pid $pid)"
+    rm -f "/var/run/$SERVICE_NAME.pid"
+  fi
   systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
   rm -f "/etc/systemd/system/$SERVICE_NAME.service"
   systemctl daemon-reload 2>/dev/null || true
+  if command -v supervisorctl >/dev/null 2>&1; then
+    supervisorctl stop "$SERVICE_NAME" 2>/dev/null || true
+    rm -f "/etc/supervisor/conf.d/$SERVICE_NAME.conf"
+    supervisorctl reread >/dev/null 2>&1; supervisorctl update >/dev/null 2>&1
+  fi
   rm -rf "$INSTALL_DIR" "$CONFIG_DIR"
   log "removed. no other system changes were made."
   exit 0
@@ -476,8 +501,12 @@ else
   die "fix the coordinator address or token and re-run"
 fi
 
-# ── 6. systemd service ───────────────────────────────────────────────────
-if command -v systemctl >/dev/null 2>&1; then
+# ── 6. service supervision ───────────────────────────────────────────────
+# Three mechanisms, in order of preference. The check is not merely "is systemctl
+# on PATH": Vast containers ship the binary but do not run systemd as PID 1, so
+# `systemctl` exists and still fails with "System has not been booted with
+# systemd as init system". Test for a running init, not for the binary.
+if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
   log "installing systemd service $SERVICE_NAME"
   cat > "/etc/systemd/system/$SERVICE_NAME.service" <<EOF
 [Unit]
@@ -490,12 +519,10 @@ Type=simple
 ExecStart=/usr/bin/env python3 $INSTALL_DIR/agent.py
 Restart=always
 RestartSec=5
-# The agent needs no privileges beyond reading hardware telemetry.
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/log
 
 [Install]
 WantedBy=multi-user.target
@@ -503,12 +530,39 @@ EOF
   systemctl daemon-reload
   systemctl enable --now "$SERVICE_NAME" >/dev/null 2>&1
   sleep 2
-  systemctl is-active --quiet "$SERVICE_NAME" \
-    && log "service is running" \
-    || warn "service installed but not active; check: journalctl -u $SERVICE_NAME"
+  if systemctl is-active --quiet "$SERVICE_NAME"; then
+    log "service is running (systemd)"
+  else
+    warn "systemd unit installed but not active; falling back"
+    _start_detached
+  fi
+
+elif command -v supervisorctl >/dev/null 2>&1 && [ -d /etc/supervisor/conf.d ]; then
+  # Vast images manage long-running processes with supervisor. This is the
+  # documented mechanism for this environment.
+  log "installing supervisor program $SERVICE_NAME"
+  cat > "/etc/supervisor/conf.d/$SERVICE_NAME.conf" <<EOF
+[program:$SERVICE_NAME]
+command=/usr/bin/env python3 $INSTALL_DIR/agent.py
+autostart=true
+autorestart=true
+startsecs=5
+stderr_logfile=/var/log/$SERVICE_NAME.err.log
+stdout_logfile=/var/log/$SERVICE_NAME.log
+EOF
+  supervisorctl reread >/dev/null 2>&1
+  supervisorctl update >/dev/null 2>&1
+  sleep 3
+  if supervisorctl status "$SERVICE_NAME" 2>/dev/null | grep -q RUNNING; then
+    log "service is running (supervisor)"
+  else
+    warn "supervisor program added but not running; falling back"
+    _start_detached
+  fi
+
 else
-  warn "systemd not available; start manually with:"
-  echo "    nohup python3 $INSTALL_DIR/agent.py >/var/log/meshweave.log 2>&1 &"
+  warn "no service manager available (no systemd, no supervisor)"
+  _start_detached
 fi
 
 cat <<EOF
@@ -518,7 +572,7 @@ cat <<EOF
   node id      $NODE_ID
   coordinator  $COORDINATOR
   config       $CONFIG_DIR/agent.json  (0600)
-  logs         journalctl -u $SERVICE_NAME
+  logs         journalctl -u $SERVICE_NAME   (or tail -f /var/log/$SERVICE_NAME.log)
 
   The agent dials out only. No inbound port was opened and no firewall
   rule was changed. To remove it:
