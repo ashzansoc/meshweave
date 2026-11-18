@@ -11,6 +11,7 @@ registry is also used from sync test code.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from datetime import timedelta
 from pathlib import Path
@@ -53,7 +54,14 @@ class ResourceRegistry:
         The coordinator may be launched from any directory; a relative path would
         silently write the snapshot somewhere unexpected and the restart would find
         nothing.
+
+        MESHWEAVE_REGISTRY_SNAPSHOT overrides it. The test suite sets this, because
+        a test run otherwise rewrites the live coordinator's snapshot with its
+        fixtures and phantom nodes reappear after the next restart.
         """
+        override = os.environ.get("MESHWEAVE_REGISTRY_SNAPSHOT")
+        if override:
+            return Path(override)
         repo_root = Path(__file__).resolve().parent.parent.parent
         return repo_root / "reports" / "registry_snapshot.json"
 

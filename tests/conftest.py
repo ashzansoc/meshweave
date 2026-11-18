@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Iterator
+
+# The registry persists to the repository's reports/ directory, which is also
+# where the live coordinator keeps its state. Without this override a test run
+# would rewrite that snapshot with fixtures, and node-a..node-d would reappear in
+# the real dashboard after the next restart.
+_SNAPSHOT_DIR = tempfile.mkdtemp(prefix="meshweave-test-registry-")
+os.environ.setdefault(
+    "MESHWEAVE_REGISTRY_SNAPSHOT", os.path.join(_SNAPSHOT_DIR, "registry_snapshot.json")
+)
 
 import pytest
 from meshweave.agent.synthetic import synthetic_inventory

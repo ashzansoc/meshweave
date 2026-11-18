@@ -244,6 +244,10 @@ def _availability(record: Any, deployments: Any) -> str:
         return "DEGRADED"
     busy = False
     for deployment in deployments.all():
+        # A stopped or failed deployment is not occupying the node, whatever its
+        # last reported phase said.
+        if deployment.status in ("STOPPED", "FAILED"):
+            continue
         for stage in deployment.stages:
             if stage.node_id != record.node_id:
                 continue

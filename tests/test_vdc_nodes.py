@@ -9,7 +9,9 @@ may be handed work.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -130,7 +132,9 @@ def test_reaping_marks_a_silent_node_and_persists_it(client: TestClient) -> None
     assert state.registry.get("alpha").status == NodeStatus.UNREACHABLE
 
     # The snapshot must carry it, or a restart resurrects a dead node as healthy.
-    snapshot = json.loads((coordinator_app.Path("reports/registry_snapshot.json")).read_text())
+    # Read the path the suite was pointed at, not the live coordinator's file.
+    snapshot_path = os.environ["MESHWEAVE_REGISTRY_SNAPSHOT"]
+    snapshot = json.loads(Path(snapshot_path).read_text())
     statuses = {n["node_id"]: n["status"] for n in snapshot["nodes"]}
     assert statuses["alpha"] == "UNREACHABLE"
 
