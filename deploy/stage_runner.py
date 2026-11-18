@@ -149,13 +149,18 @@ def build_stage(
 
 
 def dial(
-    host: str, port: int, role: str, *, token: str | None = None, timeout: float = 180.0
+    host: str, port: int, role: str, *, token: str | None = None, timeout: float = 600.0
 ) -> socket.socket:
     """Connect to a peer, retrying while it is still starting up.
 
     A socket is created per attempt. Reusing one across retries is a trap: after
     a refused connection the descriptor is unusable, so every later attempt fails
     on the same socket and the stage appears to hang even once the peer is up.
+
+    The default waits ten minutes, because a peer may still be downloading the
+    model: a 1 GiB checkpoint on a slow link takes minutes, and giving up after
+    three meant the first stage failed the deployment while the second was still
+    fetching.
     """
     deadline = time.monotonic() + timeout
     delay = 0.5
@@ -564,6 +569,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--dtype", default="bfloat16", choices=sorted(DTYPES))
     ap.add_argument("--max-seq", type=int, default=2048)
     ap.add_argument(
+        "--dial-timeout",
+        type=float,
+        default=600.0,
+        help="seconds to wait for the next stage to come up",
+    )
+    ap.add_argument(
         "--stage-token",
         default=None,
         help="shared secret each stage must present in its hello frame",
@@ -603,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
     server = listen(*parse_host_port(args.listen))
 
     if args.rank == args.world - 1:
-        reply = dial(*parse_host_port(args.reply), role="return", token=args.stage_token)
+        reply = dial(*parse_host_port(args.reply), role="return", token=args.stage_token, timeout=args.dial_timeout)
         chain = LastStage(stage, None, reply)
         chain.bind_upstream(accept_as(server, "forward", token=args.stage_token))
         threading.Thread(target=chain.loop, daemon=True).start()
@@ -612,7 +623,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.rank == 0:
-        downstream = dial(*parse_host_port(args.next_addr), role="forward", token=args.stage_token)
+        downstream = dial(*parse_host_port(args.next_addr), role="forward", token=args.stage_token, timeout=args.dial_timeout)
         engine = RankZero(stage, tokenizer, downstream, world=args.world, rank=args.rank)
         engine.start_return_reader(accept_as(server, "return", token=args.stage_token))
         log("rank 0 ready: runnable")
@@ -620,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # A middle stage: it accepts from the stage before it and dials the next one.
-    downstream = dial(*parse_host_port(args.next_addr), role="forward", token=args.stage_token)
+    downstream = dial(*parse_host_port(args.next_addr), role="forward", token=args.stage_token, timeout=args.dial_timeout)
     chain = ChainStage(stage, downstream)
     chain.bind_upstream(accept_as(server, "forward", token=args.stage_token))
     threading.Thread(target=chain.loop, daemon=True).start()

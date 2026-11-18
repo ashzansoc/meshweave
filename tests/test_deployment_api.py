@@ -107,18 +107,28 @@ def test_prompts_wait_until_every_stage_is_running(client: TestClient) -> None:
     assert prompts[0]["control"].startswith("/run/meshweave")
 
 
-def test_a_failed_stage_fails_the_deployment(client: TestClient) -> None:
+def test_a_stage_that_never_serves_eventually_fails_the_deployment(client: TestClient) -> None:
     _add_nodes(client, node("solo"))
 
     created = client.post(
         "/v1/deployments", json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["solo"]}
     ).json()
 
-    client.post(
-        f"/v1/deployments/{created['deployment_id']}/nodes/solo/status",
-        json={"phase": "failed", "detail": "torch.cuda.OutOfMemoryError"},
-    )
-    status = client.get(f"/v1/deployments/{created['deployment_id']}").json()
+    # A stage that dies before serving is retried a bounded number of times, then
+    # the deployment fails with the reason rather than retrying forever.
+    for attempt in range(3):
+        client.post(
+            f"/v1/deployments/{created['deployment_id']}/nodes/solo/status",
+            json={"phase": "starting"},
+        )
+        client.post(
+            f"/v1/deployments/{created['deployment_id']}/nodes/solo/status",
+            json={"phase": "failed", "detail": "torch.cuda.OutOfMemoryError"},
+        )
+        status = client.get(f"/v1/deployments/{created['deployment_id']}").json()
+        if attempt < 2:
+            assert status["status"] != "FAILED"
+
     assert status["status"] == "FAILED"
     assert "OutOfMemory" in (status["message"] or "")
 
@@ -156,3 +166,37 @@ def test_stop_then_forget(client: TestClient) -> None:
     removed = client.delete(f"/v1/deployments/{deployment_id}")
     assert removed.status_code == 200
     assert client.get(f"/v1/deployments/{deployment_id}").status_code == 404
+
+
+def test_a_stage_that_dies_while_a_peer_downloads_is_retried(client: TestClient) -> None:
+    """A 1 GiB checkpoint takes minutes on these links. The first stage must not
+    fail the whole deployment because the second had not finished fetching."""
+    state = client.app.state.mw
+    for record in (node("alpha", mapped={10100: 41000}), node("beta", mapped={10100: 41002})):
+        state.registry.register(record.registration)
+        state.registry.get(record.node_id).inventory = record.inventory
+
+    created = client.post(
+        "/v1/deployments",
+        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+    ).json()
+    deployment_id = created["deployment_id"]
+
+    report = lambda phase, detail=None: client.post(
+        f"/v1/deployments/{deployment_id}/nodes/alpha/status",
+        json={"phase": phase, "detail": detail},
+    )
+
+    report("starting")
+    report("failed", "ConnectionRefusedError: Connection refused")
+    status = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert status["status"] != "FAILED"
+    assert status["stages"][0]["phase"] == "restarting"
+
+    # Three launches, each failing, then it gives up with the reason attached.
+    for _ in range(3):
+        report("starting")
+        report("failed", "ConnectionRefusedError: Connection refused")
+    status = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert status["status"] == "FAILED"
+    assert "Connection refused" in (status["stages"][0]["detail"] or "")

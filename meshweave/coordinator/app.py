@@ -70,6 +70,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 SECRET_PATH = "./reports/.coordinator_secret"
 
+# A stage that cannot start after this many attempts fails the deployment. The
+# bound exists so a genuinely broken stage does not retry forever.
+MAX_STAGE_ATTEMPTS = 3
+
 
 
 class WorkloadManager:
@@ -797,6 +801,30 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             "pid": report.pid,
             "at": utcnow().isoformat(),
         }
+
+        # Count launches, not failure reports: a stage that exits while its peer
+        # is still downloading would otherwise be "retried" every heartbeat.
+        previous = deployment.node_status.get(node_id, {})
+        attempts = int(previous.get("attempts") or 0)
+        if report.phase == "starting":
+            attempts += 1
+        entry["attempts"] = attempts
+
+        # A stage that dies before serving any request is a startup race, not a
+        # verdict on the deployment: the first stage may be waiting on a peer that
+        # is still fetching a checkpoint. Retry a bounded number of times, then
+        # give up with the reason.
+        serving = any(
+            (deployment.node_status.get(s.node_id, {}).get("phase") == "running")
+            for s in deployment.stages
+        )
+        if report.phase == "failed" and not serving and attempts < MAX_STAGE_ATTEMPTS:
+            entry["phase"] = "restarting"
+            entry["detail"] = (
+                f"attempt {attempts} failed before this stage served a request; "
+                "waiting for the other stages to come up"
+            )
+
         deployment.node_status[node_id] = entry
 
         phases = [
@@ -815,7 +843,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             )
         elif all(p == "running" for p in phases):
             deployment.status = "RUNNING"
-        elif any(p in ("loading", "starting", "running") for p in phases):
+        elif any(p in ("loading", "starting", "running", "restarting") for p in phases):
             deployment.status = "LOADING"
         state.deployments.touch(deployment)
         return _summarise(deployment)
