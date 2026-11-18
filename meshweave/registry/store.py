@@ -36,6 +36,9 @@ class ResourceRegistry:
         self._lock = threading.RLock()
         self._nodes: dict[str, NodeRecord] = {}
         self._last_seen: dict[str, float] = {}
+        # Measured compute times, kept for the link assessment. Session-only: it
+        # describes what this coordinator observed, and a restart begins again.
+        self._compute_samples: list[float] = []
         self.degrade_reasons: dict[str, str] = {}
         # Snapshot loading is explicit, not automatic. A test that constructs a
         # registry must get an empty one; inheriting a previous run's cluster
@@ -248,6 +251,27 @@ class ResourceRegistry:
         return out
 
     # -------------------------------------------------------------- reaping
+
+    def fastest_compute_ms_per_token(self) -> float | None:
+        """The best per-token compute time any deployment has recorded.
+
+        Used as the denominator when judging a link. Deliberately the *fastest*
+        measurement: a link that cannot keep up with the best this hardware does
+        is not going to keep up with a slower run either.
+        """
+        values: list[float] = []
+        for record in getattr(self, "_compute_samples", []):
+            values.append(float(record))
+        return min(values) if values else None
+
+    def note_compute_ms_per_token(self, value: float | None) -> None:
+        """Record a measured compute time for later link assessment."""
+        if value is None or value <= 0:
+            return
+        samples = getattr(self, "_compute_samples", [])
+        samples.append(float(value))
+        # Keep the fastest 50: older slower runs add nothing to the comparison.
+        self._compute_samples = sorted(samples)[:50]
 
     def reap(self, now: float | None = None) -> list[str]:
         """Mark nodes whose heartbeat has gone stale. Returns the node ids."""

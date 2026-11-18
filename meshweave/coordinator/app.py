@@ -953,6 +953,55 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         removed = state.clusters.remove(cluster_id)
         return {"cluster_id": cluster_id, "removed": removed}
 
+    # -- network intelligence --------------------------------------------
+
+    @app.get("/v1/network/intelligence")
+    async def network_intelligence() -> dict[str, Any]:
+        """Score the latest measured links per strategy, against measured compute.
+
+        Compute time comes from the fastest successful benchmark we have for the
+        model being considered. When there is none, every verdict is reported as
+        indeterminate rather than estimated, because the comparison is the point.
+        """
+        from meshweave.network.intelligence import LinkView, assess_strategy
+
+        if state.topology is None:
+            raise HTTPException(
+                status_code=404,
+                detail="no links measured yet; run POST /v1/network/measure first",
+            )
+
+        compute_ms = state.registry.fastest_compute_ms_per_token()
+        assessed = []
+        for link in state.topology.links:
+            view = LinkView(
+                source=link.source,
+                target=link.target,
+                rtt_p50_ms=link.rtt_ms_min or 0.0,
+                jitter_ms=link.jitter_ms,
+                download_mbps=link.tcp_mbps_single_stream,
+                ok=bool(link.connection_success),
+            )
+            result = assess_strategy(
+                view,
+                compute_ms_per_token=compute_ms,
+                hops=2,
+                bytes_per_token=1792.0,
+            )
+            result["computed_from"] = {
+                "compute_ms_per_token": compute_ms,
+                "source": "fastest successful benchmark" if compute_ms else "unavailable",
+            }
+            assessed.append(result)
+
+        return {
+            "links": assessed,
+            "note": (
+                "Verdicts compare measured communication time against measured "
+                "compute time. No verdict is produced without a compute time."
+            ),
+        }
+
     # -- network measurement ---------------------------------------------
     #
     # Measurement is orchestrated, not dialled: the coordinator tells each node
