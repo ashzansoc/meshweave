@@ -49,7 +49,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-AGENT_VERSION = "0.4.1"
+AGENT_VERSION = "0.4.2"
 CONFIG_PATH = Path(os.environ.get("MESHWEAVE_AGENT_CONFIG", "/etc/meshweave/agent.json"))
 
 # Node names are generated, not derived from the hostname. A rented container
@@ -201,7 +201,7 @@ def gpu_inventory() -> list[dict]:
 
             util = _nvml_safe(pynvml.nvmlDeviceGetUtilizationRates, h)
             power = _nvml_safe(pynvml.nvmlDeviceGetPowerUsage, h)
-            temp = _nvml_safe(pynvml.nvmlDeviceGetTemperature, h)
+            temp = _nvml_safe(pynvml.nvmlDeviceGetTemperature, h, 0)
             capability = _nvml_safe(pynvml.nvmlDeviceGetCudaComputeCapability, h)
 
             gpus.append(

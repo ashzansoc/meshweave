@@ -45,6 +45,12 @@ def api(base: str, method: str, path: str, body: dict | None = None, timeout: fl
 
 
 def wait_until_running(base: str, deployment_id: str, timeout_s: float = 900.0) -> dict:
+    """Wait until every stage is serving.
+
+    A stage whose log shows it is listening is serving even if the coordinator
+    still labels it loading: the phase is inferred from log lines, and an older
+    runner does not print the marker for a single-stage process.
+    """
     deadline = time.monotonic() + timeout_s
     last = {}
     while time.monotonic() < deadline:
@@ -53,8 +59,15 @@ def wait_until_running(base: str, deployment_id: str, timeout_s: float = 900.0) 
             return last
         if last.get("status") == "FAILED":
             raise SystemExit(f"deployment failed: {last.get('message')}")
+        stages = last.get("stages", [])
+        listening = [
+            s for s in stages
+            if "listening" in (s.get("detail") or "") or "control socket" in (s.get("detail") or "")
+        ]
+        if listening and len(listening) == len(stages):
+            return last
         time.sleep(3.0)
-    raise SystemExit(f"deployment did not reach RUNNING: {last.get('status')}")
+    raise SystemExit(f"deployment did not come up: {last.get('status')}")
 
 
 def run_case(base: str, model: str, nodes: list[str], prompt: str, tokens: int) -> dict:

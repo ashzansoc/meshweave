@@ -1,0 +1,117 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "cases": {
+    "single_1": {
+      "deployment_id": "dep-75e42e8b9e54",
+      "nodes": [
+        "gpu-node-1"
+      ],
+      "stages": [
+        {
+          "node_id": "gpu-node-1",
+          "layers": "[0,24)",
+          "resident_gib": 1.174,
+          "phase": "pending"
+        }
+      ],
+      "prompt": "The capital of France is",
+      "output_tokens": 24,
+      "prompt_tokens": 5,
+      "ttft_ms": 368.0,
+      "ms_per_token": 38.8,
+      "total_s": 1.262,
+      "tokens_per_second": 19.024,
+      "stage_roundtrip_ms": 38.1,
+      "activation_bytes_per_token": 2090.7,
+      "gpu_during_generation": {
+        "samples": 3,
+        "util_pct_max": 9.0,
+        "util_pct_mean": 3.0,
+        "vram_used_bytes_max": 1926037504,
+        "devices": [
+          0
+        ],
+        "interval_s": 0.5
+      },
+      "text": " Paris. It is the largest city in Europe and the third largest city in the world. It is located in the south",
+      "error": null
+    },
+    "single_2": {
+      "deployment_id": "dep-aff75b33cb1c",
+      "nodes": [
+        "brisk-thistle-9ae2"
+      ],
+      "stages": [
+        {
+          "node_id": "brisk-thistle-9ae2",
+          "layers": "[0,24)",
+          "resident_gib": 1.174,
+          "phase": "pending"
+        }
+      ],
+      "prompt": "The capital of France is",
+      "output_tokens": 24,
+      "prompt_tokens": 5,
+      "ttft_ms": 496.6,
+      "ms_per_token": 41.0,
+      "total_s": 1.44,
+      "tokens_per_second": 16.671,
+      "stage_roundtrip_ms": 40.0,
+      "activation_bytes_per_token": 2090.7,
+      "gpu_during_generation": {
+        "samples": 3,
+        "util_pct_max": 21.0,
+        "util_pct_mean": 7.0,
+        "vram_used_bytes_max": 1860763648,
+        "devices": [
+          0
+        ],
+        "interval_s": 0.5
+      },
+      "text": " Paris. It is the largest city in Europe and the third largest in the world. It is located in the south of",
+      "error": null
+    },
+    "distributed": {
+      "deployment_id": "dep-a3ac3d95bb0a",
+      "nodes": [
+        "gpu-node-1",
+        "brisk-thistle-9ae2"
+      ],
+      "stages": [
+        {
+          "node_id": "gpu-node-1",
+          "layers": "[0,12)",
+          "resident_gib": 0.587,
+          "phase": "pending"
+        },
+        {
+          "node_id": "brisk-thistle-9ae2",
+          "layers": "[12,24)",
+          "resident_gib": 0.587,
+          "phase": "pending"
+        }
+      ],
+      "prompt": "The capital of France is",
+      "output_tokens": 24,
+      "prompt_tokens": 5,
+      "ttft_ms": 1053.2,
+      "ms_per_token": 310.8,
+      "total_s": 8.201,
+      "tokens_per_second": 2.926,
+      "stage_roundtrip_ms": 309.8,
+      "activation_bytes_per_token": 2090.7,
+      "gpu_during_generation": {
+        "samples": 17,
+        "util_pct_max": 1.0,
+        "util_pct_mean": 0.8,
+        "vram_used_bytes_max": 1257046016,
+        "devices": [
+          0
+        ],
+        "interval_s": 0.5
+      },
+      "text": " Paris. It is the largest city in Europe and the third largest city in the world. It is located in the south",
+      "error": null
+    }
+  }
+}

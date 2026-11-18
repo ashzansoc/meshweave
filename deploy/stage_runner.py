@@ -623,7 +623,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.world == 1:
         engine = RankZero(stage, tokenizer, None, world=args.world, rank=args.rank)
-        log("single stage: generation runs locally")
+        # The agent infers a stage's phase from this line. Without a "ready"
+        # marker a single-stage process looked like it was still loading forever.
+        log("rank 0 ready: single stage runnable")
         serve_control(Path(args.control), engine, None)
         return 0
 
