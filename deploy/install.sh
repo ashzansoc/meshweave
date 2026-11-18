@@ -2,23 +2,26 @@
 # MESHWEAVE agent installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/<owner>/meshweave/main/deploy/install.sh \
-#     | sudo bash -s -- --coordinator https://<coordinator>:8700 --token <token> --node-id <id>
+#     | sudo bash -s -- --coordinator https://<coordinator>:8700 --token <token> --enroll
 #
 # What it does, in order:
 #   1. checks the platform is Linux with a package manager it understands
-#   1. --enroll uses the token as an open-enrollment bootstrap secret
-#   1. installs python3, curl and (optionally) the NVIDIA ML bindings
-#   2. writes the agent to /opt/meshweave/agent.py
-#   3. writes credentials to /etc/meshweave/agent.json, mode 0600
-#   4. registers with the coordinator and verifies the reply
-#   5. installs a systemd unit and starts it
+#   2. --enroll uses the token as an open-enrollment bootstrap secret
+#   3. installs python3, curl and (optionally) the NVIDIA ML bindings
+#   4. writes the agent to /opt/meshweave/agent.py
+#   5. invents a node name unless you pass --node-id, and remembers it in
+#      /etc/meshweave/node_id so re-running keeps the same identity
+#   6. installs the distributed runtime (GGUF loader + stage worker)
+#   7. writes credentials to /etc/meshweave/agent.json, mode 0600
+#   8. registers with the coordinator and verifies the reply
+#   9. installs a systemd unit (or supervisor, or a detached process) and starts it
 #
 # What it deliberately does NOT do:
 #   * open any firewall port
-#    * modify sshd or /etc/ssh
-#    * install a kernel driver or touch the GPU
-#    * enable passwordless sudo
-#    * add anything to cron
+#   * modify sshd or /etc/ssh
+#   * install a kernel driver or touch the GPU
+#   * enable passwordless sudo
+#   * add anything to cron
 #
 # The agent is outbound-only: it dials the coordinator, nothing dials it.
 
@@ -63,7 +66,16 @@ while [ $# -gt 0 ]; do
     --model)       PROVISION_MODEL="${2:-}"; shift 2 ;;
     --uninstall)   UNINSTALL=1; shift ;;
     -h|--help)
-      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+      echo
+      echo 'Options:'
+      echo '  --coordinator <url>   coordinator base URL (required)'
+      echo '  --token <token>       enrollment token (required)'
+      echo '  --enroll              join using the shared enrollment token'
+      echo '  --node-id <name>      optional; a name is generated and remembered otherwise'
+      echo '  --provision           install a local inference stack on this host'
+      echo '  --model <repo>        model to download during provisioning'
+      echo '  --uninstall           remove the agent and its identity'
       exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -94,7 +106,6 @@ fi
 
 [ -n "$COORDINATOR" ] || die "--coordinator is required (e.g. https://1.2.3.4:8700)"
 [ -n "$TOKEN" ]       || die "--token is required (issued by the coordinator)"
-NODE_ID="${NODE_ID:-$(hostname)}"
 
 # ── 1. dependencies ──────────────────────────────────────────────────────
 if command -v apt-get >/dev/null 2>&1; then
@@ -173,6 +184,7 @@ import contextlib
 import json
 import os
 import platform
+import secrets
 import shutil
 import socket
 import ssl
@@ -185,6 +197,84 @@ from pathlib import Path
 
 AGENT_VERSION = "0.2.0"
 CONFIG_PATH = Path(os.environ.get("MESHWEAVE_AGENT_CONFIG", "/etc/meshweave/agent.json"))
+
+# Node names are generated, not derived from the hostname. A rented container
+# reports names like "C.61220645": not memorable, and not unique once two
+# providers hand out containers from the same pool. Two words plus four hex
+# characters gives ~80M combinations, all of them valid hostname components.
+NODE_ADJECTIVES = (
+    "amber", "brisk", "calm", "copper", "crisp", "dusk", "fern", "frost",
+    "glass", "hollow", "iron", "ivory", "jade", "kestrel", "linen", "lunar",
+    "moss", "north", "onyx", "pearl", "quartz", "quiet", "rapid", "sable",
+    "silver", "slate", "solar", "tide", "umber", "velvet", "willow", "zephyr",
+)
+NODE_NOUNS = (
+    "anchor", "arbor", "atlas", "beacon", "birch", "canyon", "cedar", "comet",
+    "creek", "delta", "drift", "falcon", "forge", "grove", "harbor", "heron",
+    "lantern", "maple", "meadow", "mesa", "orbit", "otter", "pike", "pine",
+    "prism", "quarry", "ridge", "river", "summit", "thistle", "timber", "vale",
+)
+
+
+def generate_node_id() -> str:
+    """A fresh node name, e.g. ``silver-heron-3f9c``."""
+    return f"{secrets.choice(NODE_ADJECTIVES)}-{secrets.choice(NODE_NOUNS)}-{secrets.token_hex(2)}"
+
+
+def _identity_paths() -> list[Path]:
+    """Where a generated name is remembered, most preferred first."""
+    paths: list[Path] = []
+    override = os.environ.get("MESHWEAVE_NODE_ID_FILE")
+    if override:
+        paths.append(Path(override))
+    paths.append(Path("/var/lib/meshweave/node_id"))
+    with contextlib.suppress(RuntimeError):
+        paths.append(Path.home() / ".meshweave" / "node_id")
+    return paths
+
+
+def resolve_node_id(explicit: str | None, configured: str | None) -> str:
+    """Decide what this node is called.
+
+    Precedence: --node-id, MESHWEAVE_NODE_ID, the installer's config, a name
+    written on a previous run, then a newly generated one which is persisted.
+
+    Persisting is load-bearing. A fresh random name on every start would register
+    a *new* node each time instead of reusing this one's identity, and the fleet
+    view would fill with ghosts of the same machine.
+    """
+    if explicit:
+        return explicit
+    from_env = os.environ.get("MESHWEAVE_NODE_ID")
+    if from_env:
+        return from_env
+    if configured:
+        return configured
+
+    paths = _identity_paths()
+    for path in paths:
+        try:
+            remembered = path.read_text().strip()
+        except OSError:
+            continue
+        if remembered:
+            return remembered
+
+    name = generate_node_id()
+    for path in paths:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(name + "\n")
+            return name
+        except OSError:
+            continue
+    print(
+        f"warning: could not persist a node id; this run will be {name}. "
+        "Set MESHWEAVE_NODE_ID_FILE to a writable path to keep it.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return name
 
 
 def utcnow() -> str:
@@ -445,7 +535,16 @@ def main() -> int:
     )
     ap.add_argument("--once", action="store_true", help="send one inventory and exit")
     ap.add_argument("--show", action="store_true", help="print the inventory and exit")
+    ap.add_argument(
+        "--generate-node-id",
+        action="store_true",
+        help="print a fresh node name and exit (used by the installer)",
+    )
     args = ap.parse_args()
+
+    if args.generate_node_id:
+        print(generate_node_id())
+        return 0
 
     if args.show:
         print(json.dumps(build_inventory(), indent=2))
@@ -455,11 +554,12 @@ def main() -> int:
         cfg = {
             "coordinator": args.coordinator,
             "token": args.token,
-            "node_id": args.node_id or socket.gethostname(),
+            "node_id": resolve_node_id(args.node_id, None),
             "enroll": args.enroll,
         }
     else:
         cfg = load_config()
+        cfg["node_id"] = resolve_node_id(args.node_id, cfg.get("node_id"))
 
     node_id = cfg["node_id"]
     coord = Coordinator(
@@ -511,6 +611,32 @@ if __name__ == "__main__":
 MESHWEAVE_AGENT_EOF
 
 chmod 0755 "$INSTALL_DIR/agent.py"
+
+# ── 3a. node identity ────────────────────────────────────────────────────
+# Nobody types a node name. A rented container is called things like
+# "C.61220645", which is neither memorable nor unique, so a name is generated
+# on first install and written down. Every later run -- including a re-run of
+# this command -- reuses it, so the node updates in place instead of appearing
+# in the fleet twice.
+if [ -z "$NODE_ID" ]; then
+  if [ -s "$CONFIG_DIR/node_id" ]; then
+    NODE_ID="$(tr -d '[:space:]' < "$CONFIG_DIR/node_id")"
+  elif [ -s "$CONFIG_DIR/agent.json" ]; then
+    # An install from before the identity file existed already registered under
+    # a name. Keep it: minting a new one would leave the same machine in the
+    # fleet twice, once healthy and once unreachable.
+    NODE_ID="$("$PYTHON_BIN" -c \
+      'import json,sys; print(json.load(open(sys.argv[1])).get("node_id") or "")' \
+      "$CONFIG_DIR/agent.json" 2>/dev/null || true)"
+  fi
+fi
+if [ -z "$NODE_ID" ]; then
+  NODE_ID="$("$PYTHON_BIN" "$INSTALL_DIR/agent.py" --generate-node-id)"
+fi
+[ -n "$NODE_ID" ] || die "could not determine a node id"
+printf '%s\n' "$NODE_ID" > "$CONFIG_DIR/node_id"
+chmod 0644 "$CONFIG_DIR/node_id"
+log "node identity: $NODE_ID"
 
 # ── 3b. distributed runtime ──────────────────────────────────────────────
 # pipeline_node.py needs meshweave.runtime (GGUF loading + the PhiMoE forward

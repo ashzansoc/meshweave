@@ -35,6 +35,7 @@ import contextlib
 import json
 import os
 import platform
+import secrets
 import shutil
 import socket
 import ssl
@@ -47,6 +48,84 @@ from pathlib import Path
 
 AGENT_VERSION = "0.2.0"
 CONFIG_PATH = Path(os.environ.get("MESHWEAVE_AGENT_CONFIG", "/etc/meshweave/agent.json"))
+
+# Node names are generated, not derived from the hostname. A rented container
+# reports names like "C.61220645": not memorable, and not unique once two
+# providers hand out containers from the same pool. Two words plus four hex
+# characters gives ~80M combinations, all of them valid hostname components.
+NODE_ADJECTIVES = (
+    "amber", "brisk", "calm", "copper", "crisp", "dusk", "fern", "frost",
+    "glass", "hollow", "iron", "ivory", "jade", "kestrel", "linen", "lunar",
+    "moss", "north", "onyx", "pearl", "quartz", "quiet", "rapid", "sable",
+    "silver", "slate", "solar", "tide", "umber", "velvet", "willow", "zephyr",
+)
+NODE_NOUNS = (
+    "anchor", "arbor", "atlas", "beacon", "birch", "canyon", "cedar", "comet",
+    "creek", "delta", "drift", "falcon", "forge", "grove", "harbor", "heron",
+    "lantern", "maple", "meadow", "mesa", "orbit", "otter", "pike", "pine",
+    "prism", "quarry", "ridge", "river", "summit", "thistle", "timber", "vale",
+)
+
+
+def generate_node_id() -> str:
+    """A fresh node name, e.g. ``silver-heron-3f9c``."""
+    return f"{secrets.choice(NODE_ADJECTIVES)}-{secrets.choice(NODE_NOUNS)}-{secrets.token_hex(2)}"
+
+
+def _identity_paths() -> list[Path]:
+    """Where a generated name is remembered, most preferred first."""
+    paths: list[Path] = []
+    override = os.environ.get("MESHWEAVE_NODE_ID_FILE")
+    if override:
+        paths.append(Path(override))
+    paths.append(Path("/var/lib/meshweave/node_id"))
+    with contextlib.suppress(RuntimeError):
+        paths.append(Path.home() / ".meshweave" / "node_id")
+    return paths
+
+
+def resolve_node_id(explicit: str | None, configured: str | None) -> str:
+    """Decide what this node is called.
+
+    Precedence: --node-id, MESHWEAVE_NODE_ID, the installer's config, a name
+    written on a previous run, then a newly generated one which is persisted.
+
+    Persisting is load-bearing. A fresh random name on every start would register
+    a *new* node each time instead of reusing this one's identity, and the fleet
+    view would fill with ghosts of the same machine.
+    """
+    if explicit:
+        return explicit
+    from_env = os.environ.get("MESHWEAVE_NODE_ID")
+    if from_env:
+        return from_env
+    if configured:
+        return configured
+
+    paths = _identity_paths()
+    for path in paths:
+        try:
+            remembered = path.read_text().strip()
+        except OSError:
+            continue
+        if remembered:
+            return remembered
+
+    name = generate_node_id()
+    for path in paths:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(name + "\n")
+            return name
+        except OSError:
+            continue
+    print(
+        f"warning: could not persist a node id; this run will be {name}. "
+        "Set MESHWEAVE_NODE_ID_FILE to a writable path to keep it.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return name
 
 
 def utcnow() -> str:
@@ -307,7 +386,16 @@ def main() -> int:
     )
     ap.add_argument("--once", action="store_true", help="send one inventory and exit")
     ap.add_argument("--show", action="store_true", help="print the inventory and exit")
+    ap.add_argument(
+        "--generate-node-id",
+        action="store_true",
+        help="print a fresh node name and exit (used by the installer)",
+    )
     args = ap.parse_args()
+
+    if args.generate_node_id:
+        print(generate_node_id())
+        return 0
 
     if args.show:
         print(json.dumps(build_inventory(), indent=2))
@@ -317,11 +405,12 @@ def main() -> int:
         cfg = {
             "coordinator": args.coordinator,
             "token": args.token,
-            "node_id": args.node_id or socket.gethostname(),
+            "node_id": resolve_node_id(args.node_id, None),
             "enroll": args.enroll,
         }
     else:
         cfg = load_config()
+        cfg["node_id"] = resolve_node_id(args.node_id, cfg.get("node_id"))
 
     node_id = cfg["node_id"]
     coord = Coordinator(

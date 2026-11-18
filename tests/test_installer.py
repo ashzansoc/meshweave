@@ -94,3 +94,91 @@ def test_published_port_parsing(env: dict[str, str], expected: dict[int, int]) -
             if key.startswith("VAST_TCP_PORT_"):
                 del os.environ[key]
         os.environ.update(saved)
+
+
+# --------------------------------------------------------------------------- #
+# node identity
+# --------------------------------------------------------------------------- #
+
+
+def _load_agent(identity_path: Path | None = None):
+    """Import deploy/agent.py fresh, with identity confined to a temp file.
+
+    Without the override these tests would write to the real ~/.meshweave or
+    /var/lib path, which is exactly the kind of side effect a test must not have.
+    """
+    import importlib.util
+    import sys
+
+    sys.modules.pop("mw_agent_under_test", None)
+    spec = importlib.util.spec_from_file_location("mw_agent_under_test", AGENT_PY)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if identity_path is not None:
+        module._identity_paths = lambda: [identity_path]
+    return module
+
+
+def test_generated_names_are_usable_hostnames() -> None:
+    agent = _load_agent()
+    pattern = re.compile(r"^[a-z]+-[a-z]+-[0-9a-f]{4}$")
+    names = {agent.generate_node_id() for _ in range(200)}
+    for name in names:
+        assert pattern.match(name), name
+        assert len(name) < 64
+    # Random, not serial: 200 draws should not repeat.
+    assert len(names) == 200
+
+
+def test_identity_is_generated_once_and_then_reused(tmp_path: Path) -> None:
+    """The load-bearing property: a restart must not create a second node."""
+    path = tmp_path / "node_id"
+    agent = _load_agent(path)
+
+    first = agent.resolve_node_id(None, None)
+    assert path.read_text().strip() == first
+    assert agent.resolve_node_id(None, None) == first
+    # A different process reading the same identity file must agree.
+    assert _load_agent(path).resolve_node_id(None, None) == first
+
+
+def test_explicit_names_win_over_remembered_ones(tmp_path: Path) -> None:
+    path = tmp_path / "node_id"
+    path.write_text("remembered-name\n")
+    agent = _load_agent(path)
+
+    assert agent.resolve_node_id("typed-name", None) == "typed-name"
+    assert agent.resolve_node_id(None, "configured-name") == "configured-name"
+    assert agent.resolve_node_id(None, None) == "remembered-name"
+
+
+def test_identity_survives_an_unwritable_location(tmp_path: Path) -> None:
+    blocked = tmp_path / "blocked" / "node_id"
+    (tmp_path / "blocked").write_text("not a directory")
+    writable = tmp_path / "ok" / "node_id"
+    agent = _load_agent()
+    agent._identity_paths = lambda: [blocked, writable]
+
+    name = agent.resolve_node_id(None, None)
+    assert writable.read_text().strip() == name
+
+
+def test_installer_generates_identity_when_not_given() -> None:
+    text = INSTALL_SH.read_text()
+    assert "--generate-node-id" in text
+    assert "/etc/meshweave/node_id" in text or 'CONFIG_DIR/node_id' in text
+    # The old hostname default must be gone: it produced names like C.61220645.
+    assert 'NODE_ID="${NODE_ID:-$(hostname)}"' not in text
+
+
+def test_installer_keeps_the_name_a_legacy_install_already_used() -> None:
+    """Re-installing must not mint a second identity for one machine.
+
+    Hosts enrolled before the identity file existed already registered under a
+    name. The installer has to read it back out of agent.json, otherwise that
+    node reappears as a healthy machine plus an unreachable ghost.
+    """
+    text = INSTALL_SH.read_text()
+    assert 'CONFIG_DIR/agent.json' in text
+    assert 'node_id") or ""' in text

@@ -9,8 +9,14 @@ curl -fsSL https://raw.githubusercontent.com/ashzansoc/meshweave/main/deploy/ins
   | sudo bash -s -- \
       --coordinator https://<coordinator-host>:8700 \
       --token <registration-token> \
-      --node-id my-gpu-box
+      --enroll
 ```
+
+That is the whole command, and it needs no node name. One is generated
+(`silver-heron-3f9c`) and written to `/etc/meshweave/node_id`, then reused by
+every later run, so re-running the installer updates that node rather than
+adding a second one. Pass `--node-id my-gpu-box` only if you want to choose the
+name yourself.
 
 Then verify:
 
@@ -28,7 +34,7 @@ Real telemetry only — read from NVML and /proc. Nothing is estimated.
 | CPU | model, core count |
 | RAM | total, available |
 | Disk | total, available |
-| Network | hostname, private IP, external IP, NAT status |
+| Network | hostname, private IP, external IP, published TCP port mappings |
 | Agent | version, collection timestamp, health |
 
 If no NVIDIA driver is present the agent registers anyway and reports `gpu_error`.
@@ -51,7 +57,8 @@ which is enforced by the absence of the route rather than by a permission check.
 curl -fsSL <this-script> | sudo bash -s -- --uninstall
 ```
 
-Removes the service, the agent and the credentials. Nothing else is touched.
+Removes the service, the agent and the credentials, including the generated
+node name. A later install gets a new identity rather than reusing the old one.
 
 ## Security note
 
