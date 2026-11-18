@@ -50,6 +50,15 @@ def build_parser() -> argparse.ArgumentParser:
     coord.add_argument("--tls-cert", type=Path, default=None)
     coord.add_argument("--tls-key", type=Path, default=None)
 
+    # -- gateway -------------------------------------------------------
+    gate = sub.add_parser(
+        "gateway", help="OpenAI-compatible API in front of a running deployment"
+    )
+    gate.add_argument("--coordinator", default=None)
+    gate.add_argument("--host", default="127.0.0.1")
+    gate.add_argument("--port", type=int, default=8701)
+    gate.add_argument("--api-key", default=None)
+
     # -- bench ---------------------------------------------------------
     bench = sub.add_parser("bench", help="network benchmark")
     bench_sub = bench.add_subparsers(dest="bench_command", required=True)
@@ -92,6 +101,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_agent(args)
     if args.command == "coordinator":
         return _cmd_coordinator(args)
+    if args.command == "gateway":
+        return _cmd_gateway(args)
     if args.command == "bench":
         return _cmd_bench(args)
     if args.command == "plan":
@@ -141,6 +152,30 @@ def _cmd_coordinator(args: argparse.Namespace) -> int:
         kwargs["ssl_certfile"] = str(args.tls_cert)
         kwargs["ssl_keyfile"] = str(args.tls_key)
     uvicorn.run(app, **kwargs)
+    return 0
+
+
+def _cmd_gateway(args: argparse.Namespace) -> int:
+    """Serve the OpenAI-compatible surface on its own port."""
+    import os
+    import uvicorn
+
+    from meshweave.gateway.app import CoordinatorClient, create_app
+
+    base = args.coordinator or os.environ.get(
+        "MESHWEAVE_GATEWAY_COORDINATOR", "http://127.0.0.1:8700"
+    )
+    api_key = args.api_key or os.environ.get("MESHWEAVE_GATEWAY_KEY", "")
+    app = create_app(CoordinatorClient(base), api_key=api_key)
+    if not api_key:
+        print(
+            "warning: MESHWEAVE_GATEWAY_KEY is unset, so the gateway accepts "
+            "requests without authentication",
+            file=sys.stderr,
+            flush=True,
+        )
+    print(f"gateway on http://{args.host}:{args.port} -> coordinator {base}", flush=True)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
 
 
