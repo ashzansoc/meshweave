@@ -41,15 +41,23 @@ PID_FILE="/var/run/$SERVICE_NAME.pid"
 _start_detached() {
   log "starting the agent as a detached background process"
   mkdir -p /var/log
-  setsid nohup python3 "$INSTALL_DIR/agent.py" \
+  rm -f "$PID_FILE"
+  # No setsid: it forks when it is not a process group leader, so $! was the
+  # wrapper's pid rather than the agent's. The wrapper exits, the agent keeps
+  # running, and every later stop checked a dead pid and left the agent alive.
+  # nohup plus a closed stdin is enough to survive this shell exiting.
+  nohup python3 "$INSTALL_DIR/agent.py" \
       > "/var/log/$SERVICE_NAME.log" 2>&1 < /dev/null &
-  echo $! > "$PID_FILE"
-  sleep 3
-  if kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-    log "agent running, pid $(cat "$PID_FILE")"
+  sleep 4
+  # The agent writes this itself, so it names a process we can signal.
+  local recorded=""
+  [ -f "$PID_FILE" ] && recorded="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [ -n "$recorded" ] && kill -0 "$recorded" 2>/dev/null; then
+    log "agent running, pid $recorded"
     log "logs: tail -f /var/log/$SERVICE_NAME.log"
   else
-    warn "agent did not stay running; check /var/log/$SERVICE_NAME.log"
+    warn "agent did not stay running. Last lines of its log:"
+    tail -5 "/var/log/$SERVICE_NAME.log" 2>/dev/null | sed 's/^/    /'
   fi
 }
 
@@ -62,6 +70,23 @@ _pid_cmdline() {
   else
     ps -o command= -p "$1" 2>/dev/null
   fi
+}
+
+# Terminate one pid, politely and then firmly. Only ever called with a pid whose
+# command line was already checked against this installation's agent path.
+_kill_pid() {
+  local pid="$1" waited=0
+  log "stopping leftover agent pid $pid"
+  kill -TERM "$pid" 2>/dev/null || return 1
+  while [ "$waited" -lt 20 ] && kill -0 "$pid" 2>/dev/null; do
+    sleep 0.25
+    waited=$((waited + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    warn "pid $pid ignored SIGTERM; sending SIGKILL"
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+  return 0
 }
 
 # Stop the agent that is already running before replacing it.
@@ -106,6 +131,34 @@ _stop_existing_agent() {
       fi
     fi
     rm -f "$PID_FILE"
+  fi
+
+  # Finally, any agent left behind by an older install whose pid file was wrong.
+  # The match is this installation's exact agent path, not a pattern, and every
+  # pid is printed before it is signalled so the action is auditable.
+  # /proc is preferred (ps truncates long command lines); the fallback keeps this
+  # testable on a developer machine.
+  local proc cmd
+  if [ -d /proc ]; then
+    for proc in /proc/[0-9]*; do
+      [ -d "$proc" ] || continue
+      pid="${proc#/proc/}"
+      [ "$pid" = "$$" ] && continue
+      cmd="$(_pid_cmdline "$pid")"
+      case "$cmd" in
+        *"$INSTALL_DIR/agent.py"*) _kill_pid "$pid"; [ $? -eq 0 ] && stopped=1 ;;
+      esac
+    done
+  else
+    # Process substitution, not a pipe: a pipe would run this loop in a subshell
+    # and the stopped flag would be lost.
+    while read -r pid cmd; do
+      [ -n "${pid:-}" ] || continue
+      [ "$pid" = "$$" ] && continue
+      case "$cmd" in
+        *"$INSTALL_DIR/agent.py"*) _kill_pid "$pid" && stopped=1 ;;
+      esac
+    done < <(ps -eo pid=,command= 2>/dev/null)
   fi
 
   if [ "$stopped" = "1" ]; then
@@ -343,6 +396,21 @@ def resolve_node_id(explicit: str | None, configured: str | None) -> str:
 
 def utcnow() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def write_pid_file() -> None:
+    """Record the pid this process actually has.
+
+    The installer used to trust ``$!`` from a ``setsid`` launch, which is the
+    wrapper's pid, not the agent's. The wrapper exits, the agent keeps running,
+    and every later stop looked at a dead pid and left the agent alive. Writing
+    it here means the file always names a process that can be signalled.
+    """
+    try:
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(f"{os.getpid()}\n")
+    except OSError:
+        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -649,6 +717,8 @@ class Coordinator:
 # ever signalled: before a pid is terminated its /proc cmdline is checked for
 # stage_runner.py, so a recycled pid cannot be mistaken for ours.
 # --------------------------------------------------------------------------- #
+
+PID_FILE = Path(os.environ.get("MESHWEAVE_PID_FILE", "/var/run/meshweave-agent.pid"))
 
 STAGE_DIR = Path(os.environ.get("MESHWEAVE_STAGE_DIR", "/opt/meshweave"))
 STATE_DIR = Path(os.environ.get("MESHWEAVE_STATE_DIR", "/var/lib/meshweave"))
@@ -1168,6 +1238,7 @@ def main() -> int:
         return 0
 
     # Long-running: register, then heartbeat forever.
+    write_pid_file()
     coord.register(inv)
     interval = float(os.environ.get("MESHWEAVE_HEARTBEAT_S", "5"))
     # flush=True: when stdout is a pipe or a log file Python buffers, and a

@@ -214,3 +214,35 @@ def test_the_helpers_can_be_sourced_and_called() -> None:
     assert result.returncode == 0, result.stderr
     assert "ok" in result.stdout
     assert "/var/run/meshweave-agent.pid" in result.stdout
+
+
+def test_the_detached_start_does_not_trust_a_setsid_wrapper_pid() -> None:
+    """`setsid` forks when it is not a group leader, so `$!` was the wrapper's
+    pid. The wrapper exits, the agent keeps running, and every later stop looked
+    at a dead pid and left the old agent alive."""
+    text = INSTALL_SH.read_text()
+    body = re.search(r"^_start_detached\(\) \{(.*?)^\}", text, re.S | re.M)
+    assert body, "_start_detached not found"
+    # Ignore comments: the explanation of why setsid is gone mentions it.
+    code = "\n".join(
+        line for line in body.group(1).splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "setsid" not in code
+    assert "PID_FILE" in code
+
+
+def test_a_leftover_agent_is_matched_by_exact_path() -> None:
+    """The recovery for an install whose pidfile was wrong. The match is the
+    install path, and _kill_pid is the only thing that signals anything."""
+    text = INSTALL_SH.read_text()
+    assert "_kill_pid() {" in text
+    assert '"$INSTALL_DIR/agent.py"' in text
+
+
+def test_the_leftover_agent_sweep_is_auditable() -> None:
+    body = re.search(r"^_stop_existing_agent\(\) \{(.*?)^\}", INSTALL_SH.read_text(), re.S | re.M)
+    assert body
+    sweep = body.group(1)
+    assert "/proc" in sweep
+    assert "ps -eo pid=,command=" in sweep
+    assert "_kill_pid" in sweep

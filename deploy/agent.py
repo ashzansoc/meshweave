@@ -135,6 +135,21 @@ def utcnow() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def write_pid_file() -> None:
+    """Record the pid this process actually has.
+
+    The installer used to trust ``$!`` from a ``setsid`` launch, which is the
+    wrapper's pid, not the agent's. The wrapper exits, the agent keeps running,
+    and every later stop looked at a dead pid and left the agent alive. Writing
+    it here means the file always names a process that can be signalled.
+    """
+    try:
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(f"{os.getpid()}\n")
+    except OSError:
+        pass
+
+
 # --------------------------------------------------------------------------- #
 # telemetry -- every value is real or None. Nothing is estimated.
 # --------------------------------------------------------------------------- #
@@ -439,6 +454,8 @@ class Coordinator:
 # ever signalled: before a pid is terminated its /proc cmdline is checked for
 # stage_runner.py, so a recycled pid cannot be mistaken for ours.
 # --------------------------------------------------------------------------- #
+
+PID_FILE = Path(os.environ.get("MESHWEAVE_PID_FILE", "/var/run/meshweave-agent.pid"))
 
 STAGE_DIR = Path(os.environ.get("MESHWEAVE_STAGE_DIR", "/opt/meshweave"))
 STATE_DIR = Path(os.environ.get("MESHWEAVE_STATE_DIR", "/var/lib/meshweave"))
@@ -958,6 +975,7 @@ def main() -> int:
         return 0
 
     # Long-running: register, then heartbeat forever.
+    write_pid_file()
     coord.register(inv)
     interval = float(os.environ.get("MESHWEAVE_HEARTBEAT_S", "5"))
     # flush=True: when stdout is a pipe or a log file Python buffers, and a
