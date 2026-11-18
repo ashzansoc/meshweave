@@ -51,6 +51,7 @@ fi
 
 [ "$(uname -s)" = "Linux" ] || die "this spike targets Linux; got $(uname -s)"
 command -v git >/dev/null 2>&1 || die "git is required to clone Parallax"
+PYTHON_BIN="$(command -v python3)"
 
 mkdir -p "$ROOT"
 cd "$ROOT"
@@ -72,17 +73,35 @@ if [ ! -d "$SRC/.git" ]; then
   log "cloning Parallax $REF"
   git clone --quiet --depth 1 --branch "$REF" "$URL" "$SRC" 2>"$ROOT/clone.err" \
     || { warn "clone failed:"; head -5 "$ROOT/clone.err" | sed 's/^/    /'; \
-         python3 -c "import json,sys; json.dump({'stage':'clone','ok':False,'error':'clone failed'}, open('/var/log/parallax-spike.json','w'))"; exit 1; }
+         python3 -c "import json; json.dump({'stage':'clone','ok':False,'error':'clone failed'}, open('/var/log/parallax-spike.json','w'))"; exit 1; }
 fi
 
+# The tag has no install.sh (that was added on main later). Its documented
+# source install is an editable install of the gpu extra inside a venv.
 if [ ! -x "$VENV/bin/parallax" ]; then
-  log "running the project installer (creates $VENV with uv)"
-  ( cd "$SRC" && ./install.sh --extras gpu ) >"$ROOT/install.log" 2>&1 \
-    || { warn "install failed; last lines:"; tail -20 "$ROOT/install.log" | sed 's/^/    /'; \
-         python3 -c "import json; json.dump({'stage':'install','ok':False,'error':'install.sh failed'}, open('/var/log/parallax-spike.json','w'))"; exit 1; }
+  PYVER="$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+  case "$PYVER" in
+    3.11|3.12|3.13) : ;;
+    *) warn "Parallax requires Python >=3.11,<3.14; this host has $PYVER" ;;
+  esac
+
+  log "creating a virtual environment at $VENV"
+  "$PYTHON_BIN" -m venv "$VENV"
+
+  log "installing the gpu extra (sglang and torch; this is several GB)"
+  if ! "$VENV/bin/python" -m pip install --quiet --upgrade pip >/dev/null 2>&1; then
+    warn "could not upgrade pip; continuing"
+  fi
+  if ! ( cd "$SRC" && "$VENV/bin/python" -m pip install -e '.[gpu]' ) \
+        >"$ROOT/install.log" 2>&1; then
+    warn "install failed; last lines:"
+    tail -20 "$ROOT/install.log" | sed 's/^/    /'
+    python3 -c "import json; json.dump({'stage':'install','ok':False,'error':'pip install -e .[gpu] failed; see /opt/parallax-spike/install.log'}, open('/var/log/parallax-spike.json','w'))"
+    exit 1
+  fi
 fi
 
-VERSION="$("$VENV/bin/parallax" --version 2>/dev/null | head -1 || echo unknown)"
+VERSION="$("$VENV/bin/python" -c 'from importlib.metadata import version; print(version("parallax"))' 2>/dev/null || echo unknown)"
 log "installed Parallax $VERSION"
 
 # ── 3. Start a single node ────────────────────────────────────────────────

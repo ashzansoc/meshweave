@@ -20,10 +20,20 @@ curl -fsSL https://raw.githubusercontent.com/ashzansoc/meshweave/main/deploy/par
 
 **Install method matters.** Parallax is not published on PyPI under this name —
 the `parallax` package there is an unrelated SSH fan-out tool (krig/parallax,
-v1.0.6). The supported install is a clone plus the project's own `./install.sh`,
-which uses `uv` to create the venv. An earlier revision of this script used
-`pip install parallax` and therefore tested entirely the wrong software; that run
-is discarded and must be repeated.
+v1.0.6). Two earlier revisions of this script therefore tested the wrong
+software, and then called an `install.sh` that only exists on `main`, not on the
+v0.1.2 tag. Both runs are discarded.
+
+The tag's documented source install is an editable install of the `gpu` extra:
+
+```sh
+git clone --depth 1 --branch v0.1.2 https://github.com/GradientHQ/parallax.git
+cd parallax
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e '.[gpu]'      # sglang[all]==0.5.5, torch, mlx — several GB
+```
+
+That is what the script now does. It requires Python 3.11–3.13.
 
 It is deliberately contained:
 
