@@ -11,8 +11,18 @@ interface ReadinessNode {
   ram_available_gib: number | null
   disk_available_gib: number | null
   can_host: boolean
+  agent_version: string | null
   mapped_ports: Record<string, number>
   external_ip: string | null
+}
+
+// The agent gained the work queue in 0.3.0. An older agent registers and
+// reports telemetry but will never act on a deployment, so it is shown as
+// needing an update rather than silently accepting a launch.
+const DEPLOY_AGENT = '0.3.0'
+
+function canDeploy(node: ReadinessNode): boolean {
+  return Boolean(node.can_host) && (node.agent_version ?? '') >= DEPLOY_AGENT
 }
 
 interface StageView {
@@ -163,19 +173,23 @@ export function Deploy() {
           {nodes.map((node) => {
             const ports = Object.keys(node.mapped_ports ?? {}).filter((p) => p !== '22')
             const selectedHere = selected.includes(node.node_id)
+            const deployable = canDeploy(node)
             return (
               <label
                 key={node.node_id}
-                className={`flex cursor-pointer flex-wrap items-center justify-between gap-3 rounded border px-3 py-2 ${
-                  selectedHere
-                    ? 'border-neutral-600 bg-neutral-800/60'
-                    : 'border-neutral-800 hover:bg-neutral-900'
+                className={`flex flex-wrap items-center justify-between gap-3 rounded border px-3 py-2 ${
+                  !deployable
+                    ? 'cursor-not-allowed border-neutral-800 opacity-60'
+                    : selectedHere
+                      ? 'cursor-pointer border-neutral-600 bg-neutral-800/60'
+                      : 'cursor-pointer border-neutral-800 hover:bg-neutral-900'
                 }`}
               >
                 <span className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     checked={selectedHere}
+                    disabled={!deployable}
                     onChange={() => toggle(node.node_id)}
                     className="h-3.5 w-3.5 accent-neutral-300"
                   />
@@ -192,6 +206,9 @@ export function Deploy() {
                   </span>
                   <span className={ports.length ? 'text-neutral-500' : 'text-amber-400'}>
                     {ports.length ? `ports ${ports.slice(0, 3).join(', ')}` : 'no published port'}
+                  </span>
+                  <span className={deployable ? 'text-neutral-600' : 'text-amber-400'}>
+                    {deployable ? `agent ${node.agent_version}` : `agent ${node.agent_version ?? 'unknown'} — re-run the installer`}
                   </span>
                 </span>
               </label>

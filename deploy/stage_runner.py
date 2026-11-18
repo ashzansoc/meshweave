@@ -39,7 +39,12 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
+# In the repo the script lives in deploy/ and the package is one level up; on a
+# node both sit together in /opt/meshweave.
+if (_HERE.parent / "meshweave").is_dir():
+    sys.path.insert(0, str(_HERE.parent))
 
 from meshweave.runtime.dense import (  # noqa: E402
     DenseStage,

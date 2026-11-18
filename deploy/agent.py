@@ -49,7 +49,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-AGENT_VERSION = "0.2.0"
+AGENT_VERSION = "0.3.0"
 CONFIG_PATH = Path(os.environ.get("MESHWEAVE_AGENT_CONFIG", "/etc/meshweave/agent.json"))
 
 # Node names are generated, not derived from the hostname. A rented container
