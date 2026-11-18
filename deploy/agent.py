@@ -689,12 +689,17 @@ def main() -> int:
     )
     ap.add_argument("--once", action="store_true", help="send one inventory and exit")
     ap.add_argument("--show", action="store_true", help="print the inventory and exit")
+    ap.add_argument("--version", action="store_true", help="print the agent version and exit")
     ap.add_argument(
         "--generate-node-id",
         action="store_true",
         help="print a fresh node name and exit (used by the installer)",
     )
     args = ap.parse_args()
+
+    if args.version:
+        print(AGENT_VERSION)
+        return 0
 
     if args.generate_node_id:
         print(generate_node_id())

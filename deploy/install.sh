@@ -36,23 +36,83 @@ PROVISION_MODEL=""
 INSTALL_DIR="/opt/meshweave"
 CONFIG_DIR="/etc/meshweave"
 SERVICE_NAME="meshweave-agent"
+PID_FILE="/var/run/$SERVICE_NAME.pid"
 
 _start_detached() {
   log "starting the agent as a detached background process"
   mkdir -p /var/log
   setsid nohup python3 "$INSTALL_DIR/agent.py" \
       > "/var/log/$SERVICE_NAME.log" 2>&1 < /dev/null &
-  echo $! > "/var/run/$SERVICE_NAME.pid"
+  echo $! > "$PID_FILE"
   sleep 3
-  if kill -0 "$(cat /var/run/$SERVICE_NAME.pid)" 2>/dev/null; then
-    log "agent running, pid $(cat /var/run/$SERVICE_NAME.pid)"
+  if kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    log "agent running, pid $(cat "$PID_FILE")"
     log "logs: tail -f /var/log/$SERVICE_NAME.log"
   else
     warn "agent did not stay running; check /var/log/$SERVICE_NAME.log"
   fi
 }
 
-log()  { printf '\033[0;36m==>\033[0m %s\n' "$*"; }
+# The command line of a pid, for deciding whether it is ours. /proc is the
+# authoritative source on Linux; ps is the fallback so this can also be tested on
+# a developer machine.
+_pid_cmdline() {
+  if [ -r "/proc/$1/cmdline" ]; then
+    tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null
+  else
+    ps -o command= -p "$1" 2>/dev/null
+  fi
+}
+
+# Stop the agent that is already running before replacing it.
+#
+# Without this, re-running the installer replaced /opt/meshweave/agent.py while
+# the old process kept executing the old code: `systemctl enable --now` does not
+# restart an active unit, `supervisorctl update` does not restart a program whose
+# config text is unchanged, and the detached path simply started a second copy.
+# The symptom was a node that had just been upgraded still reporting its old
+# version, because the old process kept heartbeating as well.
+#
+# Only a pid recorded here is signalled, and only after its command line is
+# confirmed to be this installation's agent. A recycled pid is left alone.
+_stop_existing_agent() {
+  local stopped=0 pid waited
+
+  if [ -f "/etc/systemd/system/$SERVICE_NAME.service" ] && [ -d /run/systemd/system ]; then
+    if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+      systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 && stopped=1
+    fi
+  fi
+
+  if [ -f "/etc/supervisor/conf.d/$SERVICE_NAME.conf" ] && command -v supervisorctl >/dev/null 2>&1; then
+    if supervisorctl status "$SERVICE_NAME" 2>/dev/null | grep -q RUNNING; then
+      supervisorctl stop "$SERVICE_NAME" >/dev/null 2>&1 && stopped=1
+    fi
+  fi
+
+  if [ -f "$PID_FILE" ]; then
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      if _pid_cmdline "$pid" | grep -q "$INSTALL_DIR/agent.py"; then
+        kill -TERM "$pid" 2>/dev/null && stopped=1
+        waited=0
+        while [ "$waited" -lt 20 ] && kill -0 "$pid" 2>/dev/null; do
+          sleep 0.25
+          waited=$((waited + 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid" 2>/dev/null || true; fi
+      else
+        warn "pid $pid in the pidfile is not this agent; leaving it alone"
+      fi
+    fi
+    rm -f "$PID_FILE"
+  fi
+
+  if [ "$stopped" = "1" ]; then
+    log "stopped the previously running agent"
+    sleep 1
+  fi
+}
 warn() { printf '\033[0;33m[!]\033[0m %s\n' "$*"; }
 die()  { printf '\033[0;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -86,10 +146,10 @@ done
 
 if [ "${UNINSTALL:-0}" = "1" ]; then
   log "removing MESHWEAVE agent"
-  if [ -f "/var/run/$SERVICE_NAME.pid" ]; then
-    pid=$(cat "/var/run/$SERVICE_NAME.pid")
+  if [ -f "$PID_FILE" ]; then
+    pid=$(cat "$PID_FILE")
     kill -TERM "$pid" 2>/dev/null && log "stopped detached agent (pid $pid)"
-    rm -f "/var/run/$SERVICE_NAME.pid"
+    rm -f "$PID_FILE"
   fi
   systemctl disable --now "$SERVICE_NAME" 2>/dev/null || true
   rm -f "/etc/systemd/system/$SERVICE_NAME.service"
@@ -838,12 +898,17 @@ def main() -> int:
     )
     ap.add_argument("--once", action="store_true", help="send one inventory and exit")
     ap.add_argument("--show", action="store_true", help="print the inventory and exit")
+    ap.add_argument("--version", action="store_true", help="print the agent version and exit")
     ap.add_argument(
         "--generate-node-id",
         action="store_true",
         help="print a fresh node name and exit (used by the installer)",
     )
     args = ap.parse_args()
+
+    if args.version:
+        print(AGENT_VERSION)
+        return 0
 
     if args.generate_node_id:
         print(generate_node_id())
@@ -923,6 +988,7 @@ if __name__ == "__main__":
 MESHWEAVE_AGENT_EOF
 
 chmod 0755 "$INSTALL_DIR/agent.py"
+log "agent version $("$PYTHON_BIN" "$INSTALL_DIR/agent.py" --version)"
 
 # ── 3a. node identity ────────────────────────────────────────────────────
 # Nobody types a node name. A rented container is called things like
@@ -1021,6 +1087,10 @@ EOF
 chmod 0600 "$CONFIG_DIR/agent.json"
 
 # ── 5. registration check ────────────────────────────────────────────────
+# Stop the previous agent first. Otherwise it keeps heartbeating the version it
+# was started with and overwrites what the new agent reports.
+_stop_existing_agent
+
 log "registering $NODE_ID with $COORDINATOR"
 ENROLL_FLAG=""
 if [ -n "$ENROLL" ]; then ENROLL_FLAG="--enroll"; fi
@@ -1095,6 +1165,9 @@ stdout_logfile=/var/log/$SERVICE_NAME.log
 EOF
   supervisorctl reread >/dev/null 2>&1
   supervisorctl update >/dev/null 2>&1
+  # update() restarts a changed program but leaves an explicitly stopped one
+  # stopped, so ask for a start.
+  supervisorctl start "$SERVICE_NAME" >/dev/null 2>&1 || true
   sleep 3
   if supervisorctl status "$SERVICE_NAME" 2>/dev/null | grep -q RUNNING; then
     log "service is running (supervisor)"
