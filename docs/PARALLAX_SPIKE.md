@@ -33,7 +33,20 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[gpu]'      # sglang[all]==0.5.5, torch, mlx — several GB
 ```
 
-That is what the script now does. It requires Python 3.11–3.13.
+That is what the script now does. It requires Python 3.11–3.13, and it pulls
+several GB of CUDA wheels — `sglang[all]`, torch, `nvidia_cusolver_cu12` and
+friends.
+
+**Expect download trouble.** A first attempt on `gpu-node-1` failed six times on
+a single 267 MB wheel (`nvidia_cusolver_cu12`) that stalled at 253.8 MB, which is
+a connectivity limit on that host, not a hardware incompatibility. The script now
+uses `uv` with a 600 s timeout and retries the install up to four times, since uv
+resumes partial downloads. If all four attempts fail, the recorded reason is
+`dependency install failed (network or disk)` and the log is in
+`/opt/parallax-spike/install.log`.
+
+That distinction matters: an install failure says nothing about whether Parallax
+runs on Turing, and must not be recorded as if it did.
 
 It is deliberately contained:
 

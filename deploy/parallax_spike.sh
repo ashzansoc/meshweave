@@ -92,11 +92,33 @@ if [ ! -x "$VENV/bin/parallax" ]; then
   if ! "$VENV/bin/python" -m pip install --quiet --upgrade pip >/dev/null 2>&1; then
     warn "could not upgrade pip; continuing"
   fi
-  if ! ( cd "$SRC" && "$VENV/bin/python" -m pip install -e '.[gpu]' ) \
-        >"$ROOT/install.log" 2>&1; then
-    warn "install failed; last lines:"
-    tail -20 "$ROOT/install.log" | sed 's/^/    /'
-    python3 -c "import json; json.dump({'stage':'install','ok':False,'error':'pip install -e .[gpu] failed; see /opt/parallax-spike/install.log'}, open('/var/log/parallax-spike.json','w'))"
+
+  # Large CUDA wheels fail part-way over a slow link. uv resumes partial
+  # downloads, so retry instead of starting over: each attempt picks up where
+  # the last one stopped.
+  if command -v uv >/dev/null 2>&1; then
+    INSTALL_CMD=(uv pip install --python "$VENV/bin/python")
+  else
+    INSTALL_CMD=("$VENV/bin/python" -m pip install --retries 10 --timeout 600)
+  fi
+
+  attempt=1
+  installed=0
+  while [ "$attempt" -le 4 ]; do
+    log "install attempt $attempt of 4"
+    if ( cd "$SRC" && UV_HTTP_TIMEOUT=600 "${INSTALL_CMD[@]}" -e '.[gpu]' ) \
+          >>"$ROOT/install.log" 2>&1; then
+      installed=1
+      break
+    fi
+    warn "attempt $attempt failed; last lines:"
+    tail -8 "$ROOT/install.log" | sed 's/^/    /'
+    attempt=$((attempt + 1))
+  done
+
+  if [ "$installed" != "1" ]; then
+    warn "install failed after $((attempt - 1)) attempt(s)"
+    python3 -c "import json; json.dump({'stage':'install','ok':False,'error':'dependency install failed (network or disk); see /opt/parallax-spike/install.log'}, open('/var/log/parallax-spike.json','w'))"
     exit 1
   fi
 fi
