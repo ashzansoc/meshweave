@@ -116,6 +116,7 @@ else
 fi
 
 command -v python3 >/dev/null 2>&1 || die "python3 is required and could not be installed"
+PYTHON_BIN="$(command -v python3)"
 
 # ── 2. GPU bindings (best effort; never fatal) ───────────────────────────
 if command -v nvidia-smi >/dev/null 2>&1; then
@@ -479,6 +480,33 @@ if __name__ == "__main__":
 MESHWEAVE_AGENT_EOF
 
 chmod 0755 "$INSTALL_DIR/agent.py"
+
+# ── 3b. distributed runtime ──────────────────────────────────────────────
+# pipeline_node.py needs meshweave.runtime (GGUF loading + the PhiMoE forward
+# pass). Without it a host can report telemetry but cannot execute a stage.
+log "installing the distributed runtime"
+mkdir -p "$INSTALL_DIR/meshweave"
+for f in __init__.py errors.py; do
+  curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/meshweave/$f" \
+    -o "$INSTALL_DIR/meshweave/$f" 2>/dev/null || true
+done
+mkdir -p "$INSTALL_DIR/meshweave/runtime" "$INSTALL_DIR/meshweave/models"
+for f in __init__.py gguf_stage.py phimoe_forward.py base.py; do
+  target="$INSTALL_DIR/meshweave/runtime/$f"
+  [ "$f" = "__init__.py" ] && target="$INSTALL_DIR/meshweave/runtime/__init__.py"
+  curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/meshweave/runtime/$f" \
+    -o "$target" 2>/dev/null || true
+done
+for f in __init__.py base.py; do
+  curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/meshweave/models/$f" \
+    -o "$INSTALL_DIR/meshweave/models/$f" 2>/dev/null || true
+done
+curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/experiments/model_execution/pipeline_node.py" \
+  -o "$INSTALL_DIR/pipeline_node.py" 2>/dev/null || warn "could not fetch pipeline_node.py"
+
+# The runtime needs torch and the gguf reader.
+"$PYTHON_BIN" -m pip install --quiet --break-system-packages torch gguf numpy 2>/dev/null \
+  || warn "could not install torch/gguf; distributed execution will be unavailable"
 
 # ── 4. credentials ───────────────────────────────────────────────────────
 log "writing credentials to $CONFIG_DIR/agent.json"

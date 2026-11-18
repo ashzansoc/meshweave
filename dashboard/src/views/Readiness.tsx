@@ -9,6 +9,13 @@ interface ReadinessNode {
   vram_gib: number
   can_host: boolean
   agent_version: string | null
+  cpu_cores: number | null
+  cpu_model: string | null
+  ram_total_gib: number | null
+  ram_available_gib: number | null
+  disk_total_gib: number | null
+  disk_available_gib: number | null
+  os_name: string | null
 }
 
 interface Readiness {
@@ -124,7 +131,24 @@ export function Readiness() {
                       </div>
                       <div className="mt-1 text-xs text-neutral-500">
                         {n.gpu_name ?? 'no GPU'} ·{' '}
-                        <Measured value={n.vram_gib || null} unit="GiB" />
+                        <Measured value={n.vram_gib || null} unit="GiB VRAM" />
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-neutral-500">
+                        <span>
+                          CPU{' '}
+                          {n.cpu_cores != null ? (
+                            `${n.cpu_cores} cores`
+                          ) : (
+                            <span className="italic">not reported</span>
+                          )}
+                        </span>
+                        <span>
+                          RAM <Measured value={n.ram_total_gib ?? null} unit="GiB" />
+                        </span>
+                        <span>
+                          disk <Measured value={n.disk_total_gib ?? null} unit="GiB" />
+                        </span>
+                        {n.os_name && <span>{n.os_name}</span>}
                       </div>
                     </div>
                     <span className="text-[11px] text-neutral-600">

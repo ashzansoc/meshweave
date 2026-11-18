@@ -466,6 +466,11 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             inv = record.inventory
             gpus = inv.gpus if inv else []
             vram = sum(g.vram_total_bytes for g in gpus) / (1024**3) if gpus else 0.0
+            host = inv.host if inv else None
+
+            def _gib(value: int | None) -> float | None:
+                return round(value / (1024**3), 1) if value else None
+
             nodes.append(
                 {
                     "node_id": record.node_id,
@@ -475,6 +480,13 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                     "vram_gib": round(vram, 1),
                     "can_host": bool(gpus) and record.status.value == "HEALTHY",
                     "agent_version": inv.agent_version if inv else None,
+                    "cpu_cores": host.cpu_cores if host else None,
+                    "cpu_model": host.cpu_model if host else None,
+                    "ram_total_gib": _gib(host.ram_total_bytes) if host else None,
+                    "ram_available_gib": _gib(host.ram_available_bytes) if host else None,
+                    "disk_total_gib": _gib(host.disk_total_bytes) if host else None,
+                    "disk_available_gib": _gib(host.disk_available_bytes) if host else None,
+                    "os_name": host.os_name if host else None,
                 }
             )
         return {

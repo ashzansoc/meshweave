@@ -1,50 +1,296 @@
 {
-  "saved_at": "2026-11-18T10:18:46.957330+00:00",
+  "saved_at": "2026-11-18T10:34:12.451555+00:00",
   "nodes": [
     {
-      "node_id": "gpu-node-1",
+      "node_id": "node-a",
       "registration": {
-        "node_id": "gpu-node-1",
-        "hostname": "40e0fb7239ae",
-        "agent_version": "0.2.0",
-        "provider": "manual",
+        "node_id": "node-a",
+        "hostname": "node-a",
+        "agent_version": "test",
+        "provider": "vast",
         "provider_instance_id": null,
         "region": null,
-        "registered_at": "2026-11-18T09:53:29.287776Z"
+        "registered_at": "2026-11-18T10:34:12.450468Z"
       },
       "inventory": {
-        "gpus": [],
+        "gpus": [
+          {
+            "index": 0,
+            "uuid": "node-a",
+            "name": "RTX 4090",
+            "manufacturer": "NVIDIA",
+            "architecture": "Ada Lovelace",
+            "compute_capability": [
+              8,
+              9
+            ],
+            "cuda_version": "12.4",
+            "driver_version": "0.0.0+synthetic",
+            "vram_total_bytes": 25769803776,
+            "vram_free_bytes": 23192823398,
+            "vram_used_bytes": 2576980378,
+            "temperature_c": 54.0,
+            "power_draw_w": 210.0,
+            "power_limit_w": 450.0,
+            "utilization_gpu_pct": 0.0,
+            "utilization_memory_pct": 10.0,
+            "memory_bandwidth_gbps": 1008.0,
+            "kind": "DISCRETE_GPU",
+            "pci_bus_id": null
+          }
+        ],
         "host": {
-          "cpu_model": "x86_64",
-          "cpu_cores": 12,
-          "ram_total_bytes": 33507590144,
-          "ram_available_bytes": 30692577280,
-          "disk_total_bytes": 17179869184,
-          "disk_available_bytes": 17036537856,
+          "cpu_model": "AMD EPYC 7763 (synthetic)",
+          "cpu_cores": 16,
+          "ram_total_bytes": 68719476736,
+          "ram_available_bytes": 51539607552,
+          "disk_total_bytes": 536870912000,
+          "disk_available_bytes": 429496729600,
           "os_name": "Linux",
-          "kernel_version": null
+          "kernel_version": "synthetic"
         },
         "network": {
-          "hostname": "40e0fb7239ae",
-          "private_ip": "172.17.0.2",
-          "external_ip": "1.208.108.242",
+          "hostname": "synthetic-rtx4090",
+          "private_ip": "10.0.0.1",
+          "external_ip": "203.0.113.10",
           "isp": null,
           "geolocation": null,
-          "nat": null,
-          "mapped_ports": {},
+          "nat": true,
+          "mapped_ports": {
+            "8000": 34567
+          },
           "overlay_interface": null,
           "advertised_down_mbps": null,
           "advertised_up_mbps": null
         },
-        "agent_version": "0.2.0",
-        "collected_at": "2026-11-18T10:18:46.768214Z"
+        "agent_version": "0.0.0+synthetic",
+        "collected_at": "2026-11-18T10:34:12.450466Z"
       },
       "status": "HEALTHY",
-      "reliability_score": 1.0,
-      "uptime_fraction": 1.0,
-      "observations": 979,
+      "reliability_score": null,
+      "uptime_fraction": null,
+      "observations": 1,
       "missed_heartbeats": 0,
-      "last_heartbeat_at": "2026-11-18T10:18:46.768239Z",
+      "last_heartbeat_at": "2026-11-18T10:34:12.450470Z",
+      "hourly_cost_usd": 0.35
+    },
+    {
+      "node_id": "node-b",
+      "registration": {
+        "node_id": "node-b",
+        "hostname": "node-b",
+        "agent_version": "test",
+        "provider": "vast",
+        "provider_instance_id": null,
+        "region": null,
+        "registered_at": "2026-11-18T10:34:12.450928Z"
+      },
+      "inventory": {
+        "gpus": [
+          {
+            "index": 0,
+            "uuid": "node-b",
+            "name": "RTX 4090",
+            "manufacturer": "NVIDIA",
+            "architecture": "Ada Lovelace",
+            "compute_capability": [
+              8,
+              9
+            ],
+            "cuda_version": "12.4",
+            "driver_version": "0.0.0+synthetic",
+            "vram_total_bytes": 25769803776,
+            "vram_free_bytes": 23192823398,
+            "vram_used_bytes": 2576980378,
+            "temperature_c": 54.0,
+            "power_draw_w": 210.0,
+            "power_limit_w": 450.0,
+            "utilization_gpu_pct": 0.0,
+            "utilization_memory_pct": 10.0,
+            "memory_bandwidth_gbps": 1008.0,
+            "kind": "DISCRETE_GPU",
+            "pci_bus_id": null
+          }
+        ],
+        "host": {
+          "cpu_model": "AMD EPYC 7763 (synthetic)",
+          "cpu_cores": 16,
+          "ram_total_bytes": 68719476736,
+          "ram_available_bytes": 51539607552,
+          "disk_total_bytes": 536870912000,
+          "disk_available_bytes": 429496729600,
+          "os_name": "Linux",
+          "kernel_version": "synthetic"
+        },
+        "network": {
+          "hostname": "synthetic-rtx4090",
+          "private_ip": "10.0.0.1",
+          "external_ip": "203.0.113.10",
+          "isp": null,
+          "geolocation": null,
+          "nat": true,
+          "mapped_ports": {
+            "8000": 34567
+          },
+          "overlay_interface": null,
+          "advertised_down_mbps": null,
+          "advertised_up_mbps": null
+        },
+        "agent_version": "0.0.0+synthetic",
+        "collected_at": "2026-11-18T10:34:12.450925Z"
+      },
+      "status": "HEALTHY",
+      "reliability_score": null,
+      "uptime_fraction": null,
+      "observations": 1,
+      "missed_heartbeats": 0,
+      "last_heartbeat_at": "2026-11-18T10:34:12.450929Z",
+      "hourly_cost_usd": 0.29
+    },
+    {
+      "node_id": "node-c",
+      "registration": {
+        "node_id": "node-c",
+        "hostname": "node-c",
+        "agent_version": "test",
+        "provider": "vast",
+        "provider_instance_id": null,
+        "region": null,
+        "registered_at": "2026-11-18T10:34:12.451261Z"
+      },
+      "inventory": {
+        "gpus": [
+          {
+            "index": 0,
+            "uuid": "node-c",
+            "name": "RTX 3090",
+            "manufacturer": "NVIDIA",
+            "architecture": "Ampere",
+            "compute_capability": [
+              8,
+              6
+            ],
+            "cuda_version": "12.4",
+            "driver_version": "0.0.0+synthetic",
+            "vram_total_bytes": 25769803776,
+            "vram_free_bytes": 23192823398,
+            "vram_used_bytes": 2576980378,
+            "temperature_c": 54.0,
+            "power_draw_w": 210.0,
+            "power_limit_w": 450.0,
+            "utilization_gpu_pct": 0.0,
+            "utilization_memory_pct": 10.0,
+            "memory_bandwidth_gbps": 936.0,
+            "kind": "DISCRETE_GPU",
+            "pci_bus_id": null
+          }
+        ],
+        "host": {
+          "cpu_model": "AMD EPYC 7763 (synthetic)",
+          "cpu_cores": 16,
+          "ram_total_bytes": 68719476736,
+          "ram_available_bytes": 51539607552,
+          "disk_total_bytes": 536870912000,
+          "disk_available_bytes": 429496729600,
+          "os_name": "Linux",
+          "kernel_version": "synthetic"
+        },
+        "network": {
+          "hostname": "synthetic-rtx3090",
+          "private_ip": "10.0.0.1",
+          "external_ip": "203.0.113.10",
+          "isp": null,
+          "geolocation": null,
+          "nat": true,
+          "mapped_ports": {
+            "8000": 34567
+          },
+          "overlay_interface": null,
+          "advertised_down_mbps": null,
+          "advertised_up_mbps": null
+        },
+        "agent_version": "0.0.0+synthetic",
+        "collected_at": "2026-11-18T10:34:12.451259Z"
+      },
+      "status": "HEALTHY",
+      "reliability_score": null,
+      "uptime_fraction": null,
+      "observations": 1,
+      "missed_heartbeats": 0,
+      "last_heartbeat_at": "2026-11-18T10:34:12.451262Z",
+      "hourly_cost_usd": 0.22
+    },
+    {
+      "node_id": "node-d",
+      "registration": {
+        "node_id": "node-d",
+        "hostname": "node-d",
+        "agent_version": "test",
+        "provider": "vast",
+        "provider_instance_id": null,
+        "region": null,
+        "registered_at": "2026-11-18T10:34:12.451520Z"
+      },
+      "inventory": {
+        "gpus": [
+          {
+            "index": 0,
+            "uuid": "node-d",
+            "name": "RTX 4080",
+            "manufacturer": "NVIDIA",
+            "architecture": "Ada Lovelace",
+            "compute_capability": [
+              8,
+              9
+            ],
+            "cuda_version": "12.4",
+            "driver_version": "0.0.0+synthetic",
+            "vram_total_bytes": 17179869184,
+            "vram_free_bytes": 15461882265,
+            "vram_used_bytes": 1717986919,
+            "temperature_c": 54.0,
+            "power_draw_w": 210.0,
+            "power_limit_w": 450.0,
+            "utilization_gpu_pct": 0.0,
+            "utilization_memory_pct": 10.0,
+            "memory_bandwidth_gbps": 717.0,
+            "kind": "DISCRETE_GPU",
+            "pci_bus_id": null
+          }
+        ],
+        "host": {
+          "cpu_model": "AMD EPYC 7763 (synthetic)",
+          "cpu_cores": 16,
+          "ram_total_bytes": 68719476736,
+          "ram_available_bytes": 51539607552,
+          "disk_total_bytes": 536870912000,
+          "disk_available_bytes": 429496729600,
+          "os_name": "Linux",
+          "kernel_version": "synthetic"
+        },
+        "network": {
+          "hostname": "synthetic-rtx4080",
+          "private_ip": "10.0.0.1",
+          "external_ip": "203.0.113.10",
+          "isp": null,
+          "geolocation": null,
+          "nat": true,
+          "mapped_ports": {
+            "8000": 34567
+          },
+          "overlay_interface": null,
+          "advertised_down_mbps": null,
+          "advertised_up_mbps": null
+        },
+        "agent_version": "0.0.0+synthetic",
+        "collected_at": "2026-11-18T10:34:12.451518Z"
+      },
+      "status": "HEALTHY",
+      "reliability_score": null,
+      "uptime_fraction": null,
+      "observations": 1,
+      "missed_heartbeats": 0,
+      "last_heartbeat_at": "2026-11-18T10:34:12.451522Z",
       "hourly_cost_usd": null
     }
   ]
