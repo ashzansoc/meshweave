@@ -252,7 +252,7 @@ def test_the_driver_version_is_read_without_a_device_handle() -> None:
     """nvmlSystemGetDriverVersion takes no handle. Passing one raised, the error
     was swallowed, and every node reported an unknown driver version."""
     source = AGENT_PY.read_text()
-    call = "opt(pynvml.nvmlSystemGetDriverVersion)"
-    assert call in source
-    # It must not be inside the per-GPU loop's opt(handle) form.
-    assert "opt(pynvml.nvmlSystemGetDriverVersion, h" not in source
+    # The driver version is system-wide: no device handle, and not read through
+    # a helper that is defined inside the device loop.
+    assert "_nvml_safe(pynvml.nvmlSystemGetDriverVersion)" in source
+    assert "def opt(" not in source[source.index("def gpu_inventory") :]
