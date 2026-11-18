@@ -310,7 +310,10 @@ def main() -> int:
 
     inv = build_inventory()
     if inv["gpu_error"]:
-        print(f"warning: GPU reporting unavailable: {inv['gpu_error']}", file=sys.stderr)
+        print(
+            f"warning: GPU reporting unavailable: {inv['gpu_error']}",
+            file=sys.stderr, flush=True,
+        )
 
     if args.once:
         print(json.dumps({"registered": coord.register(inv), "inventory": inv}, indent=2))
@@ -319,13 +322,19 @@ def main() -> int:
     # Long-running: register, then heartbeat forever.
     coord.register(inv)
     interval = float(os.environ.get("MESHWEAVE_HEARTBEAT_S", "5"))
-    print(f"registered {node_id} with {len(inv['gpus'])} GPU(s); heartbeating every {interval}s")
+    # flush=True: when stdout is a pipe or a log file Python buffers, and a
+    # detached agent's progress would be invisible until the buffer filled.
+    print(
+        f"registered {node_id} with {len(inv['gpus'])} GPU(s); "
+        f"heartbeating every {interval}s",
+        flush=True,
+    )
     while True:
         time.sleep(interval)
         try:
             coord.heartbeat(build_inventory())
         except RuntimeError as exc:
-            print(f"heartbeat failed: {exc}", file=sys.stderr)
+            print(f"heartbeat failed: {exc}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":
