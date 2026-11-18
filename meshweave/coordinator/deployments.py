@@ -153,7 +153,14 @@ class DeploymentStore:
             return
         for item in raw.get("deployments", []):
             stages = [StagePlan(**stage) for stage in item.pop("stages", [])]
-            self._items[item["deployment_id"]] = Deployment(stages=stages, **item)
+            deployment = Deployment(stages=stages, **item)
+            # A stop is durable. The status on disk may have been recomputed as
+            # LOADING by an older build, so restore the truth on load rather than
+            # showing a cancelled deployment as busy.
+            if deployment.stop_requested and deployment.status != "STOPPED":
+                deployment.status = "STOPPED"
+                deployment.message = "stopped"
+            self._items[item["deployment_id"]] = deployment
 
     def _save(self) -> None:
         if self._path is None:

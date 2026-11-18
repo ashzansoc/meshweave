@@ -827,6 +827,13 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
 
         deployment.node_status[node_id] = entry
 
+        # A stopped deployment stays stopped. Without this, the status roll-up
+        # below recomputed STOPPED as LOADING, commands_for then re-queued the
+        # stage, and the nodes restarted work that had just been cancelled.
+        if deployment.stop_requested:
+            state.deployments.touch(deployment)
+            return _summarise(deployment)
+
         phases = [
             deployment.node_status.get(stage.node_id, {}).get("phase", "pending")
             for stage in deployment.stages

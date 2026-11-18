@@ -200,3 +200,34 @@ def test_a_stage_that_dies_while_a_peer_downloads_is_retried(client: TestClient)
     status = client.get(f"/v1/deployments/{deployment_id}").json()
     assert status["status"] == "FAILED"
     assert "Connection refused" in (status["stages"][0]["detail"] or "")
+
+
+def test_stopping_a_deployment_is_not_undone_by_a_status_report(client: TestClient) -> None:
+    """The agent reports 'stopped' after a stop; the roll-up used to read that as
+    loading and re-queue the stage, restarting work that had been cancelled."""
+    state = client.app.state.mw
+    for record in (node("alpha", mapped={10100: 41000}), node("beta", mapped={10100: 41002})):
+        state.registry.register(record.registration)
+        state.registry.get(record.node_id).inventory = record.inventory
+
+    created = client.post(
+        "/v1/deployments",
+        json={"model": "Qwen/Qwen2.5-0.5B-Instruct", "node_ids": ["alpha", "beta"]},
+    ).json()
+    deployment_id = created["deployment_id"]
+
+    client.post(f"/v1/deployments/{deployment_id}/stop")
+    for node_id in ("alpha", "beta"):
+        client.post(
+            f"/v1/deployments/{deployment_id}/nodes/{node_id}/status",
+            json={"phase": "stopped"},
+        )
+
+    status = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert status["status"] == "STOPPED"
+
+    work = client.get(
+        "/v1/agents/alpha/work", headers={"authorization": "Bearer test-enroll"}
+    ).json()
+    kinds = [c["kind"] for c in work["deployment_commands"]]
+    assert "run_stage" not in kinds
