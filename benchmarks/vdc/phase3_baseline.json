@@ -1,0 +1,189 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "mode": "REPLICA",
+  "nodes": [
+    "gpu-node-1",
+    "brisk-thistle-9ae2"
+  ],
+  "prompt": "The capital of France is",
+  "max_new_tokens": 16,
+  "measured_at": "2026-11-18 23:26:28",
+  "levels": [
+    {
+      "concurrency": 1,
+      "requested": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "wall_s": 2.093,
+      "queue_wait_s": 1.346,
+      "total_output_tokens": 16,
+      "aggregate_tps": 6.498,
+      "single_request_tps_mean": 21.382,
+      "single_request_tps_min": 21.419,
+      "latency_p50_s": 0.747,
+      "latency_p95_s": 0.747,
+      "ttft_p50_ms": 144.5,
+      "ms_per_token_mean": 40.2,
+      "activation_bytes_per_token": 2576.0,
+      "itl_p50_ms": 40.16,
+      "itl_p95_ms": 40.34,
+      "itl_mean_ms": 40.18,
+      "prefill_ms_p50": 144.04,
+      "prefill_tps_mean": 55.5,
+      "input_tokens_total": 8,
+      "generation_s_total": 0.747,
+      "requests": [
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.747,
+          "ttft_ms": 144.5,
+          "prefill_ms": 144.04,
+          "node_id": "brisk-thistle-9ae2"
+        }
+      ],
+      "errors": [],
+      "repeats": 3,
+      "aggregate_tps_runs": [
+        7.647,
+        4.204,
+        7.644
+      ],
+      "single_request_tps_runs": [
+        21.136,
+        21.592,
+        21.419
+      ],
+      "aggregate_tps_min": 4.204,
+      "aggregate_tps_max": 7.647
+    },
+    {
+      "concurrency": 2,
+      "requested": 2,
+      "succeeded": 2,
+      "failed": 0,
+      "wall_s": 3.344,
+      "queue_wait_s": 1.932,
+      "total_output_tokens": 32,
+      "aggregate_tps": 8.644,
+      "single_request_tps_mean": 21.168,
+      "single_request_tps_min": 21.505,
+      "latency_p50_s": 0.668,
+      "latency_p95_s": 0.744,
+      "ttft_p50_ms": 92.45,
+      "ms_per_token_mean": 40.9,
+      "activation_bytes_per_token": 2576.0,
+      "itl_p50_ms": 39.68,
+      "itl_p95_ms": 51.9,
+      "itl_mean_ms": 40.9,
+      "prefill_ms_p50": 39.52,
+      "prefill_tps_mean": 87.1,
+      "input_tokens_total": 16,
+      "generation_s_total": 1.412,
+      "requests": [
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.668,
+          "ttft_ms": 40.0,
+          "prefill_ms": 39.52,
+          "node_id": "gpu-node-1"
+        },
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.744,
+          "ttft_ms": 144.9,
+          "prefill_ms": 144.26,
+          "node_id": "brisk-thistle-9ae2"
+        }
+      ],
+      "errors": [],
+      "repeats": 3,
+      "aggregate_tps_runs": [
+        9.083,
+        7.28,
+        9.569
+      ],
+      "single_request_tps_runs": [
+        18.372,
+        22.403,
+        22.729
+      ],
+      "aggregate_tps_min": 7.28,
+      "aggregate_tps_max": 9.569
+    },
+    {
+      "concurrency": 4,
+      "requested": 4,
+      "succeeded": 4,
+      "failed": 0,
+      "wall_s": 5.225,
+      "queue_wait_s": 2.373,
+      "total_output_tokens": 64,
+      "aggregate_tps": 14.973,
+      "single_request_tps_mean": 22.292,
+      "single_request_tps_min": 20.33,
+      "latency_p50_s": 0.742,
+      "latency_p95_s": 0.787,
+      "ttft_p50_ms": 93.95,
+      "ms_per_token_mean": 41.25,
+      "activation_bytes_per_token": 2576.0,
+      "itl_p50_ms": 39.84,
+      "itl_p95_ms": 52.1,
+      "itl_mean_ms": 41.26,
+      "prefill_ms_p50": 143.78,
+      "prefill_tps_mean": 85.7,
+      "input_tokens_total": 32,
+      "generation_s_total": 2.852,
+      "requests": [
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.742,
+          "ttft_ms": 144.7,
+          "prefill_ms": 143.98,
+          "node_id": "brisk-thistle-9ae2"
+        },
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.787,
+          "ttft_ms": 144.3,
+          "prefill_ms": 143.78,
+          "node_id": "brisk-thistle-9ae2"
+        },
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.665,
+          "ttft_ms": 38.9,
+          "prefill_ms": 38.35,
+          "node_id": "gpu-node-1"
+        },
+        {
+          "prompt_tokens": 8,
+          "output_tokens": 16,
+          "total_s": 0.658,
+          "ttft_ms": 47.9,
+          "prefill_ms": 47.28,
+          "node_id": "gpu-node-1"
+        }
+      ],
+      "errors": [],
+      "repeats": 3,
+      "aggregate_tps_runs": [
+        12.632,
+        20.038,
+        12.25
+      ],
+      "single_request_tps_runs": [
+        21.93,
+        22.379,
+        22.567
+      ],
+      "aggregate_tps_min": 12.25,
+      "aggregate_tps_max": 20.038
+    }
+  ]
+}
