@@ -307,3 +307,14 @@ def test_turing_cards_get_float16_instead_of_bfloat16() -> None:
     assert effective_dtype(config, [turing]) == "float16"
     assert effective_dtype(config, [ampere]) == "bfloat16"
     assert effective_dtype(config, [ampere, turing]) == "float16"
+
+
+def test_a_known_free_port_is_preferred_over_a_low_one() -> None:
+    """Both live nodes publish 1111, which something in the image may own."""
+    record = node("a", mapped={1111: 11517, 8080: 11568, 10100: 11524, 10200: 11493})
+    assert pick_port(record.inventory) == (10100, 11524)
+
+
+def test_without_a_preferred_port_the_highest_is_used() -> None:
+    record = node("a", mapped={1111: 11517, 6006: 11471, 8080: 11568})
+    assert pick_port(record.inventory) == (8080, 11568)

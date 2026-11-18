@@ -285,6 +285,13 @@ class DeploymentRejected(Exception):
     """A deployment that would not physically work, with the reason."""
 
 
+# Ports a stage would rather listen on. Provider images often publish a low
+# port that something else in the container already owns (1111 and 8080 are
+# common), so the lowest published port is a poor choice; 10100/10200 are what
+# these deployments have used and are normally free.
+PREFERRED_INTERNAL_PORTS = (10100, 10200, 10101, 10201)
+
+
 def pick_port(node_inventory: Any) -> tuple[int, int] | None:
     """Choose a published TCP port: returns (internal, external) or None.
 
@@ -296,7 +303,15 @@ def pick_port(node_inventory: Any) -> tuple[int, int] | None:
     candidates = [(int(k), int(v)) for k, v in mapped.items() if int(k) != 22]
     if not candidates:
         return None
-    return min(candidates, key=lambda pair: pair[0])
+
+    for preferred in PREFERRED_INTERNAL_PORTS:
+        for pair in candidates:
+            if pair[0] == preferred:
+                return pair
+
+    # Nothing preferred: take the highest numbered port. High ports are the least
+    # likely to collide with a service the image already runs.
+    return max(candidates, key=lambda pair: pair[0])
 
 
 def plan_deployment(
