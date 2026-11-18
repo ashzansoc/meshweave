@@ -1,0 +1,64 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "mode": "REPLICA",
+  "nodes": [
+    "gpu-node-1",
+    "brisk-thistle-9ae2"
+  ],
+  "prompt": "The capital of France is",
+  "max_new_tokens": 16,
+  "measured_at": "2026-11-18 22:36:42",
+  "levels": [
+    {
+      "concurrency": 1,
+      "requested": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "wall_s": 5.023,
+      "total_output_tokens": 16,
+      "aggregate_tps": 3.186,
+      "single_request_tps_mean": 14.585,
+      "single_request_tps_min": 14.585,
+      "latency_p50_s": 1.097,
+      "latency_p95_s": 1.097,
+      "ttft_p50_ms": 472.0,
+      "ms_per_token_mean": 41.7,
+      "activation_bytes_per_token": 2576.0,
+      "errors": []
+    },
+    {
+      "concurrency": 2,
+      "requested": 2,
+      "succeeded": 2,
+      "failed": 0,
+      "wall_s": 6.029,
+      "total_output_tokens": 32,
+      "aggregate_tps": 5.308,
+      "single_request_tps_mean": 19.608,
+      "single_request_tps_min": 17.448,
+      "latency_p50_s": 0.735,
+      "latency_p95_s": 0.917,
+      "ttft_p50_ms": 246.75,
+      "ms_per_token_mean": 38.65,
+      "activation_bytes_per_token": 2576.0,
+      "errors": []
+    },
+    {
+      "concurrency": 4,
+      "requested": 4,
+      "succeeded": 4,
+      "failed": 0,
+      "wall_s": 7.039,
+      "total_output_tokens": 64,
+      "aggregate_tps": 9.093,
+      "single_request_tps_mean": 22.449,
+      "single_request_tps_min": 20.513,
+      "latency_p50_s": 0.739,
+      "latency_p95_s": 0.78,
+      "ttft_p50_ms": 105.78,
+      "ms_per_token_mean": 40.7,
+      "activation_bytes_per_token": 2576.0,
+      "errors": []
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "mode": "PIPELINE",
+  "nodes": [
+    "gpu-node-1",
+    "brisk-thistle-9ae2"
+  ],
+  "prompt": "The capital of France is",
+  "max_new_tokens": 16,
+  "measured_at": "2026-11-18 22:48:48",
+  "levels": [
+    {
+      "concurrency": 1,
+      "requested": 1,
+      "succeeded": 1,
+      "failed": 0,
+      "wall_s": 11.071,
+      "queue_wait_s": 4.164,
+      "total_output_tokens": 16,
+      "aggregate_tps": 1.445,
+      "single_request_tps_mean": 2.316,
+      "single_request_tps_min": 2.316,
+      "latency_p50_s": 6.907,
+      "latency_p95_s": 6.907,
+      "ttft_p50_ms": 1497.4,
+      "ms_per_token_mean": 360.7,
+      "activation_bytes_per_token": 2576.0,
+      "errors": []
+    },
+    {
+      "concurrency": 4,
+      "requested": 4,
+      "succeeded": 4,
+      "failed": 0,
+      "wall_s": 27.14,
+      "queue_wait_s": 7.086,
+      "total_output_tokens": 64,
+      "aggregate_tps": 2.358,
+      "single_request_tps_mean": 3.193,
+      "single_request_tps_min": 3.098,
+      "latency_p50_s": 4.998,
+      "latency_p95_s": 5.164,
+      "ttft_p50_ms": 412.9,
+      "ms_per_token_mean": 306.7,
+      "activation_bytes_per_token": 2576.0,
+      "errors": []
+    }
+  ]
+}

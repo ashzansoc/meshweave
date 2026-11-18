@@ -126,12 +126,17 @@ def run_level(base: str, deployment_id: str, concurrency: int, prompt: str,
         if r.get("total_s") and (r.get("output_tokens") or 0) > 0
     ]
 
+    generation_s = sum(r["total_s"] for r in ok if r.get("total_s"))
     return {
         "concurrency": concurrency,
         "requested": concurrency,
         "succeeded": len(ok),
         "failed": concurrency - len(ok),
         "wall_s": round(wall_s, 3),
+        # Time spent waiting to be picked up, not generating. On a queue-based
+        # control plane this can dwarf the model: a 5 s poll added ~5 s to every
+        # short request until the agent began polling work every second.
+        "queue_wait_s": round(max(0.0, wall_s - generation_s), 3),
         "total_output_tokens": total_tokens,
         # Aggregate: everything the cluster produced divided by elapsed time.
         "aggregate_tps": round(total_tokens / wall_s, 3) if wall_s > 0 else None,
@@ -226,14 +231,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _print_report(payload: dict) -> None:
-    print("\n| conc | ok | aggregate tok/s | single-request tok/s | p50 s | p95 s |")
-    print("|---|---|---|---|---|---|")
+    print("\n| conc | ok | aggregate tok/s | single-request tok/s | p50 s | p95 s | queue wait s |")
+    print("|---|---|---|---|---|---|---|")
     for level in payload["levels"]:
         print(
             f"| {level['concurrency']} | {level['succeeded']}/{level['requested']} "
             f"| {level['aggregate_tps']} "
             f"| {level['single_request_tps_mean']} "
-            f"| {level['latency_p50_s']} | {level['latency_p95_s']} |"
+            f"| {level['latency_p50_s']} | {level['latency_p95_s']} "
+            f"| {level.get('queue_wait_s')} |"
         )
     print()
     print("aggregate tok/s = all tokens produced / wall time (includes queueing).")

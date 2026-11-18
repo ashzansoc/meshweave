@@ -1290,22 +1290,30 @@ def main() -> int:
         f"heartbeating every {interval}s",
         flush=True,
     )
+    # Heartbeats can be slow; the work poll cannot. A prompt that waits for the
+    # next heartbeat before anyone notices it adds seconds to every short request
+    # and makes the coordinator look slow when it is the agent that was asleep.
+    work_interval = float(os.environ.get("MESHWEAVE_WORK_POLL_S", "1.0"))
+    next_heartbeat = 0.0
     while True:
-        time.sleep(interval)
-        try:
-            coord.heartbeat(build_inventory())
-        except RuntimeError as exc:
-            print(f"heartbeat failed: {exc}", file=sys.stderr, flush=True)
-            if getattr(exc, "status", None) == 404:
-                # The coordinator no longer knows this node -- its snapshot was
-                # cleared, or it was restarted against a different store. Without
-                # this the agent would heartbeat into the void forever and the
-                # node would silently drop out of the fleet.
-                try:
-                    coord.register(build_inventory())
-                    print(f"re-registered {node_id}", file=sys.stderr, flush=True)
-                except RuntimeError as reg_exc:
-                    print(f"re-register failed: {reg_exc}", file=sys.stderr, flush=True)
+        time.sleep(work_interval)
+
+        if time.monotonic() >= next_heartbeat:
+            next_heartbeat = time.monotonic() + interval
+            try:
+                coord.heartbeat(build_inventory())
+            except RuntimeError as exc:
+                print(f"heartbeat failed: {exc}", file=sys.stderr, flush=True)
+                if getattr(exc, "status", None) == 404:
+                    # The coordinator no longer knows this node -- its snapshot
+                    # was cleared, or it was restarted against a different store.
+                    # Without this the agent would heartbeat into the void forever
+                    # and the node would silently drop out of the fleet.
+                    try:
+                        coord.register(build_inventory())
+                        print(f"re-registered {node_id}", file=sys.stderr, flush=True)
+                    except RuntimeError as reg_exc:
+                        print(f"re-register failed: {reg_exc}", file=sys.stderr, flush=True)
 
         # What the coordinator wants this node running. The set is closed:
         # run_stage, stop_stage, run_prompt. Anything else is ignored.
