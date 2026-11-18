@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from meshweave.remote.hosts import (
     CLAIMED_SPECS,
-    HOST_A,
-    HOST_B,
-    HOST_C,
     HOSTS,
-    NETWORK_DIR,
-    RAW_DIR,
+    HOSTS_ENV,
     by_id,
-    shared_ip_groups,
+    hosts_from_env,
 )
 from meshweave.remote.process_registry import (
     REGISTRY,
@@ -31,12 +29,16 @@ from meshweave.remote.ssh import (
     run_many,
 )
 
+# Directory for experiment evidence. Kept here rather than in hosts.py, which is
+# now only about resolving operator-supplied endpoints.
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+NETWORK_DIR = REPO_ROOT / "experiments" / "network"
+RAW_DIR = NETWORK_DIR / "raw"
+
 __all__ = [
     "CLAIMED_SPECS",
     "HOSTS",
-    "HOST_A",
-    "HOST_B",
-    "HOST_C",
+    "HOSTS_ENV",
     "OwnedProcess",
     "ProcessRegistry",
     "REGISTRY",
@@ -52,6 +54,6 @@ __all__ = [
     "ensure_ssh_config",
     "run",
     "run_many",
-    "shared_ip_groups",
+    "hosts_from_env",
     "terminate_experiment",
 ]

@@ -17,7 +17,7 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import FastAPI, Header, HTTPException, Request, status
 
 from meshweave import __version__
 from meshweave.communication.auth import (
@@ -194,12 +194,44 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
     # -- registration / telemetry ---------------------------------------
 
     @app.post("/v1/nodes/register")
-    async def register(registration: NodeRegistration) -> dict[str, Any]:
+    async def register(registration: NodeRegistration, request: Request) -> dict[str, Any]:
+        """Register an agent.
+
+        Two paths:
+
+          * **Open enrollment** -- the agent presents the shared enrollment token
+            in ``x-meshweave-enrollment``. This is what lets a brand-new host join
+            with a single command and no coordinator-issued credential.
+          * **Closed** -- no enrollment token configured, or a wrong one. Then the
+            node must already be known to the registry.
+
+        Either way the node is identified by the node id the agent presents, never
+        by its IP: two containers can share a public IP and differ by port.
+        """
+        supplied = request.headers.get("x-meshweave-enrollment", "")
+        expected = state.settings.enrollment_token
+
+        if expected:
+            if not secrets.compare_digest(supplied, expected):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="invalid enrollment token",
+                )
+        elif state.registry.get(registration.node_id) is None:
+            # Enrollment closed and this node is unknown: refuse rather than
+            # silently accepting an unauthenticated registration.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "open enrollment is disabled on this coordinator; set "
+                    "MESHWEAVE_COORD_ENROLLMENT_TOKEN to enable it"
+                ),
+            )
+
         record = state.registry.register(registration)
         state.workloads.event(
             f"node:{registration.node_id}", "registered", {"node_id": registration.node_id}
         )
-        # Hand the agent a node-scoped credential it uses for heartbeats.
         return {
             "node_id": record.node_id,
             "accepted": True,

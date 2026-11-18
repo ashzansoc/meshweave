@@ -27,6 +27,17 @@ class CoordinatorSettings(BaseSettings):
     heartbeat_timeout_s: float = 15.0
     heartbeat_grace_s: float = 30.0
 
+    # Open enrollment. When set, an agent presenting this shared token may
+    # register itself without a coordinator-issued credential. This is what makes
+    # "run one command on a new host" possible.
+    #
+    # It is a *bootstrap* secret, not a per-node identity: possession of it lets a
+    # host join the cluster and report telemetry. It does not grant workload
+    # execution rights -- those are still scoped per workload.
+    #
+    # Empty means enrollment is closed and only pre-authorised nodes may register.
+    enrollment_token: str | None = None
+
 
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MESHWEAVE_AGENT_", env_file=".env", extra="ignore")

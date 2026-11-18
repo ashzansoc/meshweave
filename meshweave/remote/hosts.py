@@ -1,84 +1,78 @@
-"""The three Vast.ai hosts for Phase 2A.
+"""Host definitions.
 
-Node identity is the node id, never the IP: HOST-A and HOST-C share a public IP
-and differ only by mapped port. Treating the IP as the identity would silently
-merge two machines into one.
+Hosts are **discovered, not hardcoded**. A MESHWEAVE cluster is whatever agents
+have registered with the coordinator; there is no static inventory of machines.
 
-Hardware fields here are *claims from the provider listing*. They are verified
-against ``nvidia-smi`` at runtime and the report records which is which. Anything
-unverified is marked as such.
+The earlier version of this module hardcoded three Vast instances by IP and port.
+That was wrong twice over: those instances no longer exist, and any hardcoded list
+guarantees the code drifts from reality. Nodes are identified by the node id the
+agent presents, never by IP — two containers can share a public IP and differ only
+by mapped port.
+
+For scripts that need to reach a specific host by name, resolve it from the
+environment:
+
+    MESHWEAVE_HOSTS='node-a=1.2.3.4:22 node-b=5.6.7.8:2222'
+
+Nothing here is required for the coordinator, the agent or the dashboard. It exists
+for operator convenience only.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 
 from meshweave.remote.ssh import DEFAULT_KEY, Host
 
-HOST_A = Host(
-    node_id="meshweave-host-a",
-    host="1.208.108.242",
-    port=51400,
-    user="root",
-    key=DEFAULT_KEY,
-    label="HOST-A",
-)
+# Optional operator-supplied map of node id -> "host:port". Empty by default.
+HOSTS_ENV = "MESHWEAVE_HOSTS"
 
-HOST_B = Host(
-    node_id="meshweave-host-b",
-    host="83.63.1.187",
-    port=24014,
-    user="root",
-    key=DEFAULT_KEY,
-    label="HOST-B",
-)
 
-HOST_C = Host(
-    node_id="meshweave-host-c",
-    host="1.208.108.242",
-    port=46079,
-    user="root",
-    key=DEFAULT_KEY,
-    label="HOST-C",
-)
+def hosts_from_env() -> list[Host]:
+    """Parse ``MESHWEAVE_HOSTS`` into Host objects.
 
-HOSTS: list[Host] = [HOST_A, HOST_B, HOST_C]
+    Format: ``node-a=1.2.3.4:22 node-b=5.6.7.8:2222``. Malformed entries are
+    skipped rather than aborting, because a typo in an optional convenience
+    variable should not break anything.
+    """
+    raw = os.environ.get(HOSTS_ENV, "").strip()
+    if not raw:
+        return []
 
-# What the Vast listing claims. Verified against nvidia-smi before being trusted.
-CLAIMED_SPECS: dict[str, dict[str, object]] = {
-    "meshweave-host-a": {
-        "gpu_name": "NVIDIA GeForce GTX 1660 SUPER",
-        "vram_gib": 6.0,
-    },
-    "meshweave-host-b": {
-        "gpu_name": "NVIDIA RTX 4000",
-        "vram_gib": 8.0,
-    },
-    "meshweave-host-c": {
-        "gpu_name": "NVIDIA GeForce RTX 2070 SUPER",
-        "vram_gib": 8.0,
-    },
-}
-
-# Directory for all Phase 2A raw evidence.
-NETWORK_DIR = Path(__file__).resolve().parent.parent.parent / "experiments" / "network"
-RAW_DIR = NETWORK_DIR / "raw"
+    hosts: list[Host] = []
+    for entry in raw.split():
+        node_id, _, addr = entry.partition("=")
+        if not node_id or not addr:
+            continue
+        host, _, port = addr.partition(":")
+        if not host:
+            continue
+        try:
+            port_num = int(port) if port else 22
+        except ValueError:
+            continue
+        hosts.append(
+            Host(node_id=node_id, host=host, port=port_num, user="root", key=DEFAULT_KEY)
+        )
+    return hosts
 
 
 def by_id(node_id: str) -> Host:
-    for host in HOSTS:
+    """Resolve one host by node id from the environment.
+
+    Raises rather than guessing: an unknown node id is an operator error, and
+    silently returning a wrong endpoint would be worse than failing.
+    """
+    for host in hosts_from_env():
         if host.node_id == node_id:
             return host
-    raise KeyError(f"unknown host {node_id!r}; known: {[h.node_id for h in HOSTS]}")
+    raise KeyError(
+        f"node {node_id!r} is not in {HOSTS_ENV}. Hosts are discovered from "
+        "registered agents; set the variable to reach one by name from a script."
+    )
 
 
-def shared_ip_groups() -> list[list[str]]:
-    """Group node ids that share a public IP.
-
-    Returns groups with more than one member. Sharing an IP is a signal worth
-    investigating; it is not proof of co-location.
-    """
-    by_ip: dict[str, list[str]] = {}
-    for host in HOSTS:
-        by_ip.setdefault(host.host, []).append(host.node_id)
-    return [ids for ids in by_ip.values() if len(ids) > 1]
+# There is no built-in fleet. Scripts that imported these names get empty values,
+# which is the honest answer: no hosts are known until agents register.
+HOSTS: list[Host] = []
+CLAIMED_SPECS: dict[str, dict[str, object]] = {}

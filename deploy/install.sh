@@ -6,6 +6,7 @@
 #
 # What it does, in order:
 #   1. checks the platform is Linux with a package manager it understands
+#   1. --enroll uses the token as an open-enrollment bootstrap secret
 #   1. installs python3, curl and (optionally) the NVIDIA ML bindings
 #   2. writes the agent to /opt/meshweave/agent.py
 #   3. writes credentials to /etc/meshweave/agent.json, mode 0600
@@ -26,6 +27,7 @@ set -euo pipefail
 COORDINATOR=""
 TOKEN=""
 NODE_ID=""
+ENROLL=""
 INSTALL_DIR="/opt/meshweave"
 CONFIG_DIR="/etc/meshweave"
 SERVICE_NAME="meshweave-agent"
@@ -39,6 +41,7 @@ while [ $# -gt 0 ]; do
     --coordinator) COORDINATOR="${2:-}"; shift 2 ;;
     --token)       TOKEN="${2:-}"; shift 2 ;;
     --node-id)     NODE_ID="${2:-}"; shift 2 ;;
+    --enroll)      ENROLL=1; shift ;;
     --uninstall)   UNINSTALL=1; shift ;;
     -h|--help)
       sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -302,10 +305,18 @@ def build_inventory() -> dict:
 
 
 class Coordinator:
-    def __init__(self, base_url: str, token: str, node_id: str, ca: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        node_id: str,
+        ca: str | None = None,
+        enroll: bool = False,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.node_id = node_id
+        self.enroll = enroll
         self._ssl = ssl.create_default_context(cafile=ca) if ca else None
 
     def _request(self, method: str, path: str, body: dict | None = None, timeout: float = 30.0) -> dict:
@@ -314,6 +325,10 @@ class Coordinator:
         req = urllib.request.Request(url, data=data, method=method)
         req.add_header("Authorization", f"Bearer {self.token}")
         req.add_header("Content-Type", "application/json")
+        if self.enroll:
+            # Open enrollment: the coordinator accepts this shared bootstrap token
+            # on /v1/nodes/register so a new host needs no prior credential.
+            req.add_header("x-meshweave-enrollment", self.token)
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=self._ssl) as resp:
                 raw = resp.read()
@@ -372,6 +387,11 @@ def main() -> int:
     ap.add_argument("--coordinator", default=None)
     ap.add_argument("--token", default=None)
     ap.add_argument("--node-id", default=None)
+    ap.add_argument(
+        "--enroll",
+        action="store_true",
+        help="use the token as an open-enrollment bootstrap token",
+    )
     ap.add_argument("--once", action="store_true", help="send one inventory and exit")
     ap.add_argument("--show", action="store_true", help="print the inventory and exit")
     args = ap.parse_args()
@@ -385,12 +405,16 @@ def main() -> int:
             "coordinator": args.coordinator,
             "token": args.token,
             "node_id": args.node_id or socket.gethostname(),
+            "enroll": args.enroll,
         }
     else:
         cfg = load_config()
 
     node_id = cfg["node_id"]
-    coord = Coordinator(cfg["coordinator"], cfg["token"], node_id, cfg.get("ca"))
+    coord = Coordinator(
+        cfg["coordinator"], cfg["token"], node_id, cfg.get("ca"),
+        enroll=bool(cfg.get("enroll") or args.enroll),
+    )
 
     inv = build_inventory()
     if inv["gpu_error"]:
@@ -424,14 +448,17 @@ cat > "$CONFIG_DIR/agent.json" <<EOF
 {
   "coordinator": "$COORDINATOR",
   "token": "$TOKEN",
-  "node_id": "$NODE_ID"
+  "node_id": "$NODE_ID",
+  "enroll": ${ENROLL:-false}
 }
 EOF
 chmod 0600 "$CONFIG_DIR/agent.json"
 
 # ── 5. registration check ────────────────────────────────────────────────
 log "registering $NODE_ID with $COORDINATOR"
-if python3 "$INSTALL_DIR/agent.py" --once > /tmp/meshweave-register.json 2>/tmp/meshweave-register.err; then
+if ENROLL_FLAG=""
+[ -n "$ENROLL" ] && ENROLL_FLAG="--enroll"
+python3 "$INSTALL_DIR/agent.py" $ENROLL_FLAG --once > /tmp/meshweave-register.json 2>/tmp/meshweave-register.err; then
   python3 - <<'PY' || warn "registration reported a problem"
 import json
 d = json.load(open("/tmp/meshweave-register.json"))
