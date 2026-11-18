@@ -296,7 +296,26 @@ def network_info() -> dict:
         "private_ip": _private_ip(),
         "external_ip": os.environ.get("PUBLIC_IPADDR") or None,
         "nat": None,
+        "mapped_ports": _published_tcp_ports(),
     }
+
+
+def _published_tcp_ports() -> dict[int, int]:
+    """Container-published TCP port mappings, as the provider declares them.
+
+    Vast exports ``VAST_TCP_PORT_<internal>=<external>``. Reported verbatim so
+    the coordinator can name a reachable endpoint for peer-to-peer traffic. A
+    host with no mappings reports an empty dict rather than a guess; stage
+    traffic then relies on the private address or a tunnel.
+    """
+    ports: dict[int, int] = {}
+    for key, value in os.environ.items():
+        if not key.startswith("VAST_TCP_PORT_"):
+            continue
+        internal = key[len("VAST_TCP_PORT_"):]
+        if internal.isdigit() and value.strip().isdigit():
+            ports[int(internal)] = int(value.strip())
+    return ports
 
 
 def _private_ip() -> str | None:
@@ -365,7 +384,9 @@ class Coordinator:
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")[:300]
-            raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
+            error = RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}")
+            error.status = exc.code  # type: ignore[attr-defined]
+            raise error from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"{method} {path} -> {exc.reason}") from exc
 
@@ -473,6 +494,16 @@ def main() -> int:
             coord.heartbeat(build_inventory())
         except RuntimeError as exc:
             print(f"heartbeat failed: {exc}", file=sys.stderr, flush=True)
+            if getattr(exc, "status", None) == 404:
+                # The coordinator no longer knows this node -- its snapshot was
+                # cleared, or it was restarted against a different store. Without
+                # this the agent would heartbeat into the void forever and the
+                # node would silently drop out of the fleet.
+                try:
+                    coord.register(build_inventory())
+                    print(f"re-registered {node_id}", file=sys.stderr, flush=True)
+                except RuntimeError as reg_exc:
+                    print(f"re-register failed: {reg_exc}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":
@@ -485,28 +516,45 @@ chmod 0755 "$INSTALL_DIR/agent.py"
 # pipeline_node.py needs meshweave.runtime (GGUF loading + the PhiMoE forward
 # pass). Without it a host can report telemetry but cannot execute a stage.
 log "installing the distributed runtime"
-mkdir -p "$INSTALL_DIR/meshweave"
-for f in __init__.py errors.py; do
-  curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/meshweave/$f" \
-    -o "$INSTALL_DIR/meshweave/$f" 2>/dev/null || true
+REPO_RAW="https://raw.githubusercontent.com/ashzansoc/meshweave/main"
+fetch_runtime() {
+  mkdir -p "$(dirname "$2")"
+  curl -fsSL --max-time 90 "$REPO_RAW/$1" -o "$2"
+}
+
+# Every file is checked individually. A silently missing module would otherwise
+# only surface later, on the node, when someone tries to start a stage.
+RUNTIME_MISSING=0
+for f in \
+    meshweave/__init__.py \
+    meshweave/errors.py \
+    meshweave/runtime/__init__.py \
+    meshweave/runtime/gguf_stage.py \
+    meshweave/runtime/phimoe_forward.py \
+    meshweave/models/__init__.py \
+    meshweave/models/base.py \
+    experiments/model_execution/pipeline_node.py; do
+  dest="$INSTALL_DIR/$f"
+  # pipeline_node.py runs as a script, so it sits at the install root.
+  [ "$f" = "experiments/model_execution/pipeline_node.py" ] && dest="$INSTALL_DIR/pipeline_node.py"
+  fetch_runtime "$f" "$dest" || { warn "could not fetch $f"; RUNTIME_MISSING=1; }
 done
-mkdir -p "$INSTALL_DIR/meshweave/runtime" "$INSTALL_DIR/meshweave/models"
-for f in __init__.py gguf_stage.py phimoe_forward.py base.py; do
-  target="$INSTALL_DIR/meshweave/runtime/$f"
-  [ "$f" = "__init__.py" ] && target="$INSTALL_DIR/meshweave/runtime/__init__.py"
-  curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/meshweave/runtime/$f" \
-    -o "$target" 2>/dev/null || true
-done
-for f in __init__.py base.py; do
-  curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/meshweave/models/$f" \
-    -o "$INSTALL_DIR/meshweave/models/$f" 2>/dev/null || true
-done
-curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/experiments/model_execution/pipeline_node.py" \
-  -o "$INSTALL_DIR/pipeline_node.py" 2>/dev/null || warn "could not fetch pipeline_node.py"
+[ "$RUNTIME_MISSING" = "0" ] || \
+  warn "runtime incomplete: this node reports telemetry but cannot execute a stage"
 
 # The runtime needs torch and the gguf reader.
 "$PYTHON_BIN" -m pip install --quiet --break-system-packages torch gguf numpy 2>/dev/null \
   || warn "could not install torch/gguf; distributed execution will be unavailable"
+
+# Prove the runtime imports on this machine now, rather than at stage start.
+if "$PYTHON_BIN" -c "import torch" >/dev/null 2>&1; then
+  if ( cd "$INSTALL_DIR" && "$PYTHON_BIN" -c "import meshweave.runtime.phimoe_forward" ) \
+       2>/tmp/meshweave-import.err; then
+    log "runtime verified: torch $("$PYTHON_BIN" -c 'import torch; print(torch.__version__)')"
+  else
+    warn "runtime import failed: $(head -3 /tmp/meshweave-import.err | tr '\n' ' ')"
+  fi
+fi
 
 # ── 4. credentials ───────────────────────────────────────────────────────
 log "writing credentials to $CONFIG_DIR/agent.json"
@@ -522,9 +570,11 @@ chmod 0600 "$CONFIG_DIR/agent.json"
 
 # ── 5. registration check ────────────────────────────────────────────────
 log "registering $NODE_ID with $COORDINATOR"
-if ENROLL_FLAG=""
-[ -n "$ENROLL" ] && ENROLL_FLAG="--enroll"
-python3 "$INSTALL_DIR/agent.py" $ENROLL_FLAG --once > /tmp/meshweave-register.json 2>/tmp/meshweave-register.err; then
+ENROLL_FLAG=""
+if [ -n "$ENROLL" ]; then ENROLL_FLAG="--enroll"; fi
+# $ENROLL_FLAG is intentionally unquoted: empty means "pass no flag".
+if python3 "$INSTALL_DIR/agent.py" $ENROLL_FLAG --once \
+     > /tmp/meshweave-register.json 2>/tmp/meshweave-register.err; then
   python3 - <<'PY' || warn "registration reported a problem"
 import json
 d = json.load(open("/tmp/meshweave-register.json"))

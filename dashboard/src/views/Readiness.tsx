@@ -16,6 +16,9 @@ interface ReadinessNode {
   disk_total_gib: number | null
   disk_available_gib: number | null
   os_name: string | null
+  private_ip: string | null
+  external_ip: string | null
+  mapped_ports: Record<string, number>
 }
 
 interface Readiness {
@@ -149,6 +152,21 @@ export function Readiness() {
                           disk <Measured value={n.disk_total_gib ?? null} unit="GiB" />
                         </span>
                         {n.os_name && <span>{n.os_name}</span>}
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-neutral-600">
+                        <span>
+                          private {n.private_ip ?? 'unknown'}
+                        </span>
+                        <span>
+                          public {n.external_ip ?? 'unknown'}
+                        </span>
+                        <span>
+                          {Object.keys(n.mapped_ports).length > 0
+                            ? Object.entries(n.mapped_ports)
+                                .map(([inner, outer]) => `${inner}→${outer}`)
+                                .join(' ')
+                            : 'no published ports'}
+                        </span>
                       </div>
                     </div>
                     <span className="text-[11px] text-neutral-600">

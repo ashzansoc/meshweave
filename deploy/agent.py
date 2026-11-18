@@ -158,7 +158,26 @@ def network_info() -> dict:
         "private_ip": _private_ip(),
         "external_ip": os.environ.get("PUBLIC_IPADDR") or None,
         "nat": None,
+        "mapped_ports": _published_tcp_ports(),
     }
+
+
+def _published_tcp_ports() -> dict[int, int]:
+    """Container-published TCP port mappings, as the provider declares them.
+
+    Vast exports ``VAST_TCP_PORT_<internal>=<external>``. Reported verbatim so
+    the coordinator can name a reachable endpoint for peer-to-peer traffic. A
+    host with no mappings reports an empty dict rather than a guess; stage
+    traffic then relies on the private address or a tunnel.
+    """
+    ports: dict[int, int] = {}
+    for key, value in os.environ.items():
+        if not key.startswith("VAST_TCP_PORT_"):
+            continue
+        internal = key[len("VAST_TCP_PORT_"):]
+        if internal.isdigit() and value.strip().isdigit():
+            ports[int(internal)] = int(value.strip())
+    return ports
 
 
 def _private_ip() -> str | None:
@@ -227,7 +246,9 @@ class Coordinator:
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode(errors="replace")[:300]
-            raise RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}") from exc
+            error = RuntimeError(f"{method} {path} -> HTTP {exc.code}: {detail}")
+            error.status = exc.code  # type: ignore[attr-defined]
+            raise error from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"{method} {path} -> {exc.reason}") from exc
 
@@ -335,6 +356,16 @@ def main() -> int:
             coord.heartbeat(build_inventory())
         except RuntimeError as exc:
             print(f"heartbeat failed: {exc}", file=sys.stderr, flush=True)
+            if getattr(exc, "status", None) == 404:
+                # The coordinator no longer knows this node -- its snapshot was
+                # cleared, or it was restarted against a different store. Without
+                # this the agent would heartbeat into the void forever and the
+                # node would silently drop out of the fleet.
+                try:
+                    coord.register(build_inventory())
+                    print(f"re-registered {node_id}", file=sys.stderr, flush=True)
+                except RuntimeError as reg_exc:
+                    print(f"re-register failed: {reg_exc}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

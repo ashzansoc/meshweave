@@ -467,10 +467,17 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             gpus = inv.gpus if inv else []
             vram = sum(g.vram_total_bytes for g in gpus) / (1024**3) if gpus else 0.0
             host = inv.host if inv else None
+            net = inv.network if inv else None
 
             def _gib(value: int | None) -> float | None:
                 return round(value / (1024**3), 1) if value else None
 
+            # Where another node could reach this node's stage listener. The
+            # private address only works inside one network; the published
+            # mappings are what make a container's port reachable across
+            # providers. Empty when the provider declares none -- reported, not
+            # guessed.
+            mapped = {str(k): v for k, v in (net.mapped_ports if net else {}).items()}
             nodes.append(
                 {
                     "node_id": record.node_id,
@@ -487,6 +494,9 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                     "disk_total_gib": _gib(host.disk_total_bytes) if host else None,
                     "disk_available_gib": _gib(host.disk_available_bytes) if host else None,
                     "os_name": host.os_name if host else None,
+                    "private_ip": net.private_ip if net else None,
+                    "external_ip": net.external_ip if net else None,
+                    "mapped_ports": mapped,
                 }
             )
         return {
