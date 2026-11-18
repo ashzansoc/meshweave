@@ -246,7 +246,7 @@ def test_running_stage_is_not_dispatched_twice() -> None:
     deployment = new_deployment("Qwen/Qwen2.5-0.5B-Instruct", stages, config, 2048)
     store = DeploymentStore()
     store.add(deployment)
-    deployment.node_status["a"] = {"phase": "running"}
+    deployment.node_status[f"{deployment.deployment_id}#a#0"] = {"phase": "running"}
 
     assert [c for c in store.commands_for("a") if c["kind"] == "run_stage"] == []
 

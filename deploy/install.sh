@@ -702,12 +702,17 @@ class Coordinator:
         return self._request("GET", f"/v1/agents/{self.node_id}/work")
 
     def report_stage(
-        self, deployment_id: str, phase: str, detail: str | None, pid: int | None
+        self,
+        deployment_id: str,
+        phase: str,
+        detail: str | None,
+        pid: int | None,
+        stage_key: str | None = None,
     ) -> None:
         self._request(
             "POST",
             f"/v1/deployments/{deployment_id}/nodes/{self.node_id}/status",
-            {"phase": phase, "detail": detail, "pid": pid},
+            {"phase": phase, "detail": detail, "pid": pid, "stage_key": stage_key},
         )
 
     def report_result(self, deployment_id: str, result: dict) -> None:
@@ -810,8 +815,11 @@ def stage_phase(entry: dict) -> tuple[str, str | None]:
 
 def start_stage(command: dict) -> dict:
     deployment_id = str(command["deployment_id"])
+    # A node may host several replicas of one deployment; the stage key keeps
+    # their pids and sockets apart.
+    stage_key = str(command.get("stage_key") or f"{deployment_id}#0")
     state = _read_stage_state()
-    existing = state.get(deployment_id)
+    existing = state.get(stage_key)
     if existing and _alive(int(existing["pid"])) and "stage_runner.py" in _cmdline(
         int(existing["pid"])
     ):
@@ -842,7 +850,7 @@ def start_stage(command: dict) -> dict:
         "--max-seq",
         str(command.get("max_seq") or 2048),
         "--control",
-        str(CONTROL_SOCKET),
+        str(command.get("control") or CONTROL_SOCKET),
     ]
     for flag, key in (
         ("--listen", "listen"),
@@ -855,7 +863,7 @@ def start_stage(command: dict) -> dict:
             argv += [flag, str(value)]
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = LOG_DIR / f"meshweave-stage-{deployment_id}.log"
+    log_path = LOG_DIR / f"meshweave-stage-{deployment_id}-r{command.get('replica', 0)}.log"
     handle = log_path.open("a")
     try:
         proc = subprocess.Popen(
@@ -873,12 +881,14 @@ def start_stage(command: dict) -> dict:
     finally:
         handle.close()
 
-    state[deployment_id] = {
+    log_path = LOG_DIR / f"meshweave-stage-{stage_key.replace('#', '-')}.log"
+    state[stage_key] = {
         "pid": proc.pid,
         "log": str(log_path),
         "started_at": utcnow(),
         "model": command.get("repo"),
         "rank": command.get("rank"),
+        "deployment_id": deployment_id,
     }
     _write_stage_state(state)
     print(
@@ -889,9 +899,9 @@ def start_stage(command: dict) -> dict:
     return {"phase": "starting", "detail": "stage process launched", "pid": proc.pid}
 
 
-def stop_stage(deployment_id: str) -> dict:
+def stop_stage(stage_key: str) -> dict:
     state = _read_stage_state()
-    entry = state.get(deployment_id)
+    entry = state.get(stage_key)
     if not entry:
         return {"phase": "stopped", "detail": "no stage recorded", "pid": None}
 
@@ -899,7 +909,7 @@ def stop_stage(deployment_id: str) -> dict:
     if "stage_runner.py" not in _cmdline(pid):
         # The pid is gone or has been reused by something else. Drop the record
         # instead of signalling a process that is not ours.
-        state.pop(deployment_id, None)
+        state.pop(stage_key, None)
         _write_stage_state(state)
         return {"phase": "stopped", "detail": "stage already gone", "pid": None}
 
@@ -912,7 +922,7 @@ def stop_stage(deployment_id: str) -> dict:
     if _alive(pid):
         os.kill(pid, signal.SIGKILL)
 
-    state.pop(deployment_id, None)
+    state.pop(stage_key, None)
     _write_stage_state(state)
     return {"phase": "stopped", "detail": "stage terminated", "pid": None}
 
@@ -1062,14 +1072,19 @@ def handle_deployment_commands(coord: Coordinator, commands: list[dict]) -> None
         if not deployment_id:
             continue
         try:
+            stage_key = str(command.get("stage_key") or f"{deployment_id}#0")
             if kind == "run_stage":
                 outcome = start_stage(command)
                 coord.report_stage(
-                    deployment_id, outcome["phase"], outcome.get("detail"), outcome.get("pid")
+                    deployment_id,
+                    outcome["phase"],
+                    outcome.get("detail"),
+                    outcome.get("pid"),
+                    stage_key,
                 )
             elif kind == "stop_stage":
-                outcome = stop_stage(deployment_id)
-                coord.report_stage(deployment_id, "stopped", "stage stopped", None)
+                stop_stage(stage_key)
+                coord.report_stage(deployment_id, "stopped", "stage stopped", None, stage_key)
             elif kind == "run_prompt":
                 # Generation can take minutes on these links. Running it inline
                 # would stall heartbeats, and the coordinator would declare the
@@ -1198,10 +1213,11 @@ def _prompt_worker(coord: Coordinator, deployment_id: str, command: dict) -> Non
 
 def refresh_stage_status(coord: Coordinator) -> None:
     """Keep the coordinator's view of each stage current."""
-    for deployment_id, entry in _read_stage_state().items():
+    for stage_key, entry in _read_stage_state().items():
+        deployment_id = entry.get("deployment_id") or stage_key.split("#", 1)[0]
         phase, detail = stage_phase(entry)
         try:
-            coord.report_stage(deployment_id, phase, detail, int(entry["pid"]))
+            coord.report_stage(deployment_id, phase, detail, int(entry["pid"]), stage_key)
         except RuntimeError as exc:
             print(f"stage status report failed: {exc}", file=sys.stderr, flush=True)
 

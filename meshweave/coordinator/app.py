@@ -48,6 +48,7 @@ from meshweave.coordinator.deployments import (
     plan_deployment,
     plan_replicas,
     choose_replica,
+    stage_key_for,
     best_single_node,
 )
 from meshweave.core import (
@@ -159,12 +160,18 @@ class DeploymentRequest(BaseModel):
     # "AUTO" lets the coordinator choose, "PIPELINE" splits one model across
     # nodes, "REPLICA" runs a full copy on each.
     mode: str = "AUTO"
+    # Copies to place on each node. One is the default; more exploit idle GPU
+    # memory when decode is CPU-bound.
+    replicas_per_node: int = 1
 
 
 class DeploymentStatusReport(BaseModel):
     phase: str
     detail: str | None = None
     pid: int | None = None
+    # Which replica on this node. Defaults to replica 0 so a node running one
+    # copy keeps working with an older agent.
+    stage_key: str | None = None
 
 
 class DeploymentResult(BaseModel):
@@ -732,11 +739,13 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                     "resident_gib": round(stage.resident_bytes / GIB, 3),
                     "checkpoint_gib": round(stage.checkpoint_bytes / GIB, 2),
                     "address": stage.address,
-                    "phase": deployment.node_status.get(stage.node_id, {}).get("phase", "pending"),
-                    "detail": deployment.node_status.get(stage.node_id, {}).get("detail"),
-                    "vram_used_gib": deployment.node_status.get(stage.node_id, {}).get(
-                        "vram_used_gib"
-                    ),
+                    "replica": stage.replica,
+                    "phase": deployment.node_status.get(
+                        stage_key_for(deployment.deployment_id, stage), {}
+                    ).get("phase", "pending"),
+                    "detail": deployment.node_status.get(
+                        stage_key_for(deployment.deployment_id, stage), {}
+                    ).get("detail"),
                 }
                 for stage in deployment.stages
             ],
@@ -802,7 +811,10 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         try:
             if mode == "REPLICA":
                 stages = plan_replicas(
-                    records=records, config=config, max_seq=request.max_seq
+                    records=records,
+                    config=config,
+                    max_seq=request.max_seq,
+                    max_per_node=max(1, request.replicas_per_node),
                 )
             else:
                 stages = plan_deployment(
@@ -841,8 +853,9 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         deployment = _deployment_or_404(deployment_id)
         if state.deployments.stage_for(deployment_id, node_id) is None:
             raise HTTPException(status_code=404, detail=f"{node_id} has no stage here")
+        stage_key = report.stage_key or f"{deployment_id}#{node_id}#0"
 
-        previous = deployment.node_status.get(node_id, {})
+        previous = deployment.node_status.get(stage_key, {})
         if previous.get("phase") == "failed" and report.phase == "stopped":
             # The stage already failed; the reason is the useful part. Keep it
             # rather than replacing it with the shutdown notice.
@@ -868,7 +881,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
 
         # Count launches, not failure reports: a stage that exits while its peer
         # is still downloading would otherwise be "retried" every heartbeat.
-        previous = deployment.node_status.get(node_id, {})
+        previous = deployment.node_status.get(stage_key, {})
         attempts = int(previous.get("attempts") or 0)
         if report.phase == "starting":
             attempts += 1
@@ -879,7 +892,12 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         # is still fetching a checkpoint. Retry a bounded number of times, then
         # give up with the reason.
         serving = any(
-            (deployment.node_status.get(s.node_id, {}).get("phase") == "running")
+            (
+                deployment.node_status.get(
+                    stage_key_for(deployment.deployment_id, s), {}
+                ).get("phase")
+                == "running"
+            )
             for s in deployment.stages
         )
         if report.phase == "failed" and not serving and attempts < MAX_STAGE_ATTEMPTS:
@@ -889,7 +907,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                 "waiting for the other stages to come up"
             )
 
-        deployment.node_status[node_id] = entry
+        deployment.node_status[stage_key] = entry
 
         # A stopped deployment stays stopped. Without this, the status roll-up
         # below recomputed STOPPED as LOADING, commands_for then re-queued the
@@ -899,16 +917,21 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             return _summarise(deployment)
 
         phases = [
-            deployment.node_status.get(stage.node_id, {}).get("phase", "pending")
+            deployment.node_status.get(
+                stage_key_for(deployment.deployment_id, stage), {}
+            ).get("phase", "pending")
             for stage in deployment.stages
         ]
         if "failed" in phases:
             deployment.status = "FAILED"
             deployment.message = next(
                 (
-                    deployment.node_status[s.node_id].get("detail")
-                    for s in deployment.stages
-                    if deployment.node_status.get(s.node_id, {}).get("phase") == "failed"
+                    deployment.node_status[stage_key_for(deployment.deployment_id, st)].get("detail")
+                    for st in deployment.stages
+                    if deployment.node_status.get(
+                        stage_key_for(deployment.deployment_id, st), {}
+                    ).get("phase")
+                    == "failed"
                 ),
                 None,
             )
@@ -929,18 +952,16 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             # Prefer the node that reported; fall back to the node the prompt
             # was assigned to, so a result that omits its origin still releases
             # the load it was counted against.
-            node_id = payload.get("node_id")
-            if not node_id:
-                node_id = next(
-                    (
-                        p.get("assigned_node")
-                        for p in deployment.prompts
-                        if p.get("id") == payload.get("prompt_id")
-                    ),
-                    None,
-                )
-            if node_id and deployment.replica_load.get(node_id):
-                deployment.replica_load[node_id] -= 1
+            key = payload.get("stage_key") or next(
+                (
+                    p.get("assigned_replica")
+                    for p in deployment.prompts
+                    if p.get("id") == payload.get("prompt_id")
+                ),
+                None,
+            )
+            if key and deployment.replica_load.get(key):
+                deployment.replica_load[key] -= 1
         for prompt in deployment.prompts:
             if prompt.get("id") == result.prompt_id:
                 prompt["state"] = "done"
@@ -963,10 +984,13 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         prompt_id = f"p-{secrets.token_hex(4)}"
         assigned = None
         if deployment.mode == "REPLICA":
-            def _healthy(node_id: str) -> bool:
-                info = deployment.node_status.get(node_id, {})
+            def _healthy(stage_key: str) -> bool:
+                info = deployment.node_status.get(stage_key, {})
                 if info.get("phase") != "running":
                     return False
+                # Keys are deployment#node#replica; the node is the middle field.
+                parts = stage_key.split("#")
+                node_id = parts[1] if len(parts) > 1 else stage_key
                 record = state.registry.get(node_id)
                 return bool(record and record.status.value == "HEALTHY")
 
@@ -986,7 +1010,7 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
                 "temperature": request.temperature,
                 "top_p": request.top_p,
                 "state": "queued",
-                "assigned_node": assigned,
+                "assigned_replica": assigned,
                 "at": utcnow().isoformat(),
             }
         )

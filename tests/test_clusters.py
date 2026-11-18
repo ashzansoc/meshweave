@@ -290,7 +290,9 @@ def test_requests_spread_across_replicas(client: TestClient) -> None:
     detail = client.get(f"/v1/deployments/{deployment_id}").json()
     load = detail["replica_load"]
     assert sum(load.values()) == 4
-    assert load.get("alpha") == 2 and load.get("beta") == 2
+    # Keys are deployment#node#replica so two nodes' replica 0 stay distinct.
+    assert load.get(f"{deployment_id}#alpha#0") == 2
+    assert load.get(f"{deployment_id}#beta#0") == 2
 
 
 def test_a_replica_is_skipped_when_it_is_not_running(client: TestClient) -> None:
@@ -310,7 +312,7 @@ def test_a_replica_is_skipped_when_it_is_not_running(client: TestClient) -> None
     response = client.post(f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "x"})
     assert response.status_code == 200
     detail = client.get(f"/v1/deployments/{deployment_id}").json()
-    assert detail["replica_load"] == {"alpha": 1}
+    assert detail["replica_load"] == {f"{deployment_id}#alpha#0": 1}
 
 
 def test_a_result_releases_the_replica_it_ran_on(client: TestClient) -> None:
@@ -376,3 +378,73 @@ def test_a_result_without_a_node_still_releases_the_assignment(client: TestClien
     )
     detail = client.get(f"/v1/deployments/{deployment_id}").json()
     assert sum(detail["replica_load"].values()) == 0
+
+
+def test_a_node_can_host_several_replicas_when_asked(client: TestClient) -> None:
+    """Decode is CPU-bound with the GPU idle, so spare VRAM buys throughput."""
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha", "beta"],
+            "mode": "REPLICA",
+            "replicas_per_node": 2,
+        },
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert len(body["stages"]) == 4
+    assert [s["replica"] for s in body["stages"]] == [0, 1, 0, 1]
+    # Every replica is a whole model, not a slice.
+    assert {s["layers"] for s in body["stages"]} == {"[0,24)"}
+
+
+def test_each_replica_gets_its_own_control_socket(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha"],
+            "mode": "REPLICA",
+            "replicas_per_node": 2,
+        },
+    ).json()
+    work = client.get(
+        "/v1/agents/alpha/work", headers={"authorization": "Bearer test-enroll"}
+    ).json()
+    commands = [c for c in work["deployment_commands"] if c["kind"] == "run_stage"]
+    assert len(commands) == 2
+    sockets = {c["control"] for c in commands}
+    assert len(sockets) == 2, sockets
+    assert all(c["stage_key"].endswith(f"#{c['replica']}") for c in commands)
+
+
+def test_replicas_on_one_node_are_routed_independently(client: TestClient) -> None:
+    created = client.post(
+        "/v1/deployments",
+        json={
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "node_ids": ["alpha"],
+            "mode": "REPLICA",
+            "replicas_per_node": 2,
+        },
+    ).json()
+    deployment_id = created["deployment_id"]
+
+    # Both replicas must report running before either is routable.
+    for replica in (0, 1):
+        client.post(
+            f"/v1/deployments/{deployment_id}/nodes/alpha/status",
+            json={"phase": "running", "stage_key": f"{deployment_id}#alpha#{replica}"},
+        )
+
+    for _ in range(2):
+        assert client.post(
+            f"/v1/deployments/{deployment_id}/prompt", json={"prompt": "x"}
+        ).status_code == 200
+
+    detail = client.get(f"/v1/deployments/{deployment_id}").json()
+    assert detail["replica_load"] == {
+        f"{deployment_id}#alpha#0": 1,
+        f"{deployment_id}#alpha#1": 1,
+    }

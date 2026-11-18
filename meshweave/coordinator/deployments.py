@@ -110,6 +110,9 @@ class StagePlan:
     address: str | None
     listen_port: int | None
     external_port: int | None
+    # Which replica on that node. A node with spare VRAM can host several full
+    # copies; they are independent processes, not a split.
+    replica: int = 0
 
     @property
     def layers(self) -> str:
@@ -213,7 +216,8 @@ class DeploymentStore:
             for stage in deployment.stages:
                 if stage.node_id != node_id:
                     continue
-                state = deployment.node_status.get(node_id, {})
+                stage_key = stage_key_for(deployment.deployment_id, stage)
+                state = deployment.node_status.get(stage_key, {})
                 # A FAILED deployment is not asked to stop: the stage is already
                 # gone, and the "stopped" report would overwrite the reason it
                 # failed, which is the only useful thing left.
@@ -222,6 +226,8 @@ class DeploymentStore:
                         {
                             "kind": "stop_stage",
                             "deployment_id": deployment.deployment_id,
+                            "stage_key": stage_key,
+                            "replica": stage.replica,
                             "reason": "deployment stopped",
                         }
                     )
@@ -234,6 +240,9 @@ class DeploymentStore:
                         {
                             "kind": "run_stage",
                             "deployment_id": deployment.deployment_id,
+                            "stage_key": stage_key,
+                            "replica": stage.replica,
+                            "control": control_path(deployment.deployment_id, stage.replica),
                             "rank": stage.rank,
                             "world": 1 if replica else len(deployment.stages),
                             "repo": deployment.model,
@@ -265,8 +274,8 @@ class DeploymentStore:
                     for prompt in deployment.prompts:
                         if prompt.get("state") != "queued":
                             continue
-                        assigned = prompt.get("assigned_node")
-                        if assigned and assigned != node_id:
+                        assigned = prompt.get("assigned_replica")
+                        if assigned and assigned != stage_key:
                             continue
                         prompt["state"] = "sent"
                         dirty = True
@@ -279,7 +288,7 @@ class DeploymentStore:
                                 "max_new_tokens": prompt.get("max_new_tokens", 32),
                                 "temperature": prompt.get("temperature", 0.0),
                                 "top_p": prompt.get("top_p", 1.0),
-                                "control": "/run/meshweave/control.sock",
+                                "control": control_path(deployment.deployment_id, stage.replica),
                             }
                         )
         if dirty:
@@ -509,6 +518,7 @@ def plan_replicas(
     max_seq: int = 2048,
     vram_headroom: float = 0.85,
     disk_headroom: float = 0.90,
+    max_per_node: int = 1,
 ) -> list[StagePlan]:
     """One full-model stage per node, with no network between them.
 
@@ -551,19 +561,26 @@ def plan_replicas(
                 f"checkpoint is {checkpoint / GIB:.1f} GiB"
             )
 
-        stages.append(
-            StagePlan(
-                node_id=record.node_id,
-                rank=0,
-                start=0,
-                end=config.layers,
-                resident_bytes=resident,
-                checkpoint_bytes=checkpoint,
-                address=None,
-                listen_port=None,
-                external_port=None,
+        # How many whole copies fit in this node's free memory. Decode here is
+        # CPU-bound and the GPU sits idle, so a second process on the same card
+        # costs VRAM and little else.
+        copies = int((free * vram_headroom) // max(1, resident + kv_reserve))
+        copies = max(1, min(max_per_node, copies))
+        for replica in range(copies):
+            stages.append(
+                StagePlan(
+                    node_id=record.node_id,
+                    rank=0,
+                    replica=replica,
+                    start=0,
+                    end=config.layers,
+                    resident_bytes=resident,
+                    checkpoint_bytes=checkpoint,
+                    address=None,
+                    listen_port=None,
+                    external_port=None,
+                )
             )
-        )
     return stages
 
 
@@ -603,6 +620,24 @@ def best_single_node(
     return best[0], f"{best[0]} can hold the whole model in {needed / GIB:.2f} GiB"
 
 
+def stage_key_for(deployment_id: str, stage: StagePlan) -> str:
+    """Identity of one process.
+
+    It must include the node: the same deployment and replica number exist on
+    every node, so without it replica 0 on two machines would share one status
+    entry and one load counter.
+    """
+    return f"{deployment_id}#{stage.node_id}#{stage.replica}"
+
+
+def control_path(deployment_id: str, replica: int) -> str:
+    """Unix socket for one replica, unique per deployment and replica.
+
+    A fixed path would make the second replica on a node collide with the first.
+    """
+    return f"/run/meshweave/control-{deployment_id}-{replica}.sock"
+
+
 def choose_replica(deployment: "Deployment", healthy) -> str | None:
     """Pick the replica with the least work: fewest in flight, then fewest queued.
 
@@ -610,17 +645,21 @@ def choose_replica(deployment: "Deployment", healthy) -> str | None:
     healthy is never chosen, and a deployment with no healthy replica returns None
     rather than sending work somewhere that cannot take it.
     """
-    candidates = [s.node_id for s in deployment.stages if healthy(s.node_id)]
+    candidates = [
+        stage_key_for(deployment.deployment_id, s)
+        for s in deployment.stages
+        if healthy(stage_key_for(deployment.deployment_id, s))
+    ]
     if not candidates:
         return None
 
-    def score(node_id: str) -> tuple[int, int, str]:
+    def score(key: str) -> tuple[int, int, str]:
         queued = sum(
             1
             for p in deployment.prompts
-            if p.get("assigned_node") == node_id and p.get("state") == "queued"
+            if p.get("assigned_replica") == key and p.get("state") == "queued"
         )
-        return (deployment.replica_load.get(node_id, 0), queued, node_id)
+        return (deployment.replica_load.get(key, 0), queued, key)
 
     return min(candidates, key=score)
 
