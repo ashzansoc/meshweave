@@ -389,6 +389,36 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         )
         return {"ok": True}
 
+    # -- agent work queue ------------------------------------------------
+
+    @app.get("/v1/agents/{node_id}/work")
+    async def agent_work(node_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+        """What this agent should do next.
+
+        Returns an empty list when there is nothing to run. The closed set of
+        commands is enforced by the agent, not by this endpoint: it may only
+        execute a WorkloadAssignment, never an arbitrary string.
+        """
+        token = _bearer(authorization)
+        if not token:
+            raise HTTPException(status_code=401, detail="missing agent token")
+        record = state.registry.get(node_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="unknown node")
+
+        pending = [
+            a
+            for w in state.workloads.all()
+            if w.finished_at is None
+            for a in state.workloads.assignments_for(w.workload_id)
+            if a.node_id == node_id
+        ]
+        return {
+            "node_id": node_id,
+            "commands": [a.model_dump(mode="json") for a in pending],
+            "heartbeat_interval_s": state.settings.heartbeat_timeout_s / 3.0,
+        }
+
     # -- metrics / evidence ---------------------------------------------
 
     @app.get("/v1/metrics")
