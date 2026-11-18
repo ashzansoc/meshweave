@@ -29,6 +29,7 @@ class CoordinatorSettings(BaseSettings):
     # Where deployments are remembered. Separate from the registry snapshot so
     # that tests, and a second coordinator, do not share one file.
     deployments_file: Path = Path("./reports/deployments.json")
+    clusters_file: Path = Path("./reports/clusters.json")
 
     # Open enrollment. When set, an agent presenting this shared token may
     # register itself without a coordinator-issued credential. This is what makes

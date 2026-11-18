@@ -32,6 +32,7 @@ from meshweave.communication.auth import (
     verify_node_token,
 )
 from meshweave.config import CoordinatorSettings
+from meshweave.coordinator.clusters import ClusterStore, cluster_status, validate_members
 from meshweave.coordinator.network import NetworkProbeManager
 from meshweave.coordinator.deployments import (
     GIB,
@@ -115,6 +116,11 @@ class WorkloadManager:
 
 
 
+class ClusterRequest(BaseModel):
+    name: str
+    node_ids: list[str] = Field(default_factory=list)
+
+
 class NetworkMeasureRequest(BaseModel):
     node_ids: list[str] = Field(default_factory=list)
     rtt_count: int = 20
@@ -141,6 +147,7 @@ class NetworkProbeReport(BaseModel):
 class DeploymentRequest(BaseModel):
     model: str
     node_ids: list[str] = Field(default_factory=list)
+    cluster_id: str | None = None
     max_seq: int = 2048
 
 
@@ -182,6 +189,7 @@ class CoordinatorState:
         self.secret = load_or_create_secret(SECRET_PATH)
         self.deployments = DeploymentStore(Path(settings.deployments_file))
         self.network = NetworkProbeManager(self.registry.get)
+        self.clusters = ClusterStore(Path(settings.clusters_file))
         # Per-node telemetry history for the charts. Bounded and session-only:
         # it is what this coordinator observed while it was running, not a time
         # series database, and the API says so.
@@ -711,8 +719,26 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+        if request.cluster_id:
+            cluster = state.clusters.get(request.cluster_id)
+            if cluster is None:
+                raise HTTPException(status_code=404, detail="unknown cluster")
+            if request.node_ids and set(request.node_ids) != set(cluster.node_ids):
+                raise HTTPException(
+                    status_code=400,
+                    detail="node_ids contradict the cluster membership; pass one or the other",
+                )
+            node_ids = list(cluster.node_ids)
+        else:
+            if not request.node_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail="pass node_ids or a cluster_id naming the nodes to use",
+                )
+            node_ids = list(request.node_ids)
+
         records = []
-        for node_id in request.node_ids:
+        for node_id in node_ids:
             record = state.registry.get(node_id)
             if record is None:
                 raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
@@ -733,6 +759,8 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
 
         dtype = effective_dtype(config, records)
         deployment = new_deployment(repo, stages, config, request.max_seq, dtype=dtype)
+        if request.cluster_id:
+            deployment.config["cluster_id"] = request.cluster_id
         state.deployments.add(deployment)
         state.workloads.event(
             f"dep:{deployment.deployment_id}",
@@ -848,6 +876,82 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         state.deployments.touch(deployment)
         removed = state.deployments.remove(deployment_id)
         return {"deployment_id": deployment_id, "removed": removed}
+
+    # -- virtual clusters -------------------------------------------------
+    #
+    # A cluster names a group of physical machines. It does not create a larger
+    # GPU: aggregate capacity is reported as distributed, with a note that it is
+    # not addressable as one pool.
+
+    def _availability_of(record) -> str:
+        """Availability takes a node record; cluster_status resolves members first."""
+        if record is None:
+            return "OFFLINE"
+        return _availability(record, state.deployments)
+
+    @app.post("/v1/clusters")
+    async def create_cluster(request: ClusterRequest) -> dict[str, Any]:
+        name = request.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="cluster name is required")
+        if state.clusters.by_name(name) is not None:
+            raise HTTPException(status_code=409, detail=f"a cluster named {name!r} exists")
+
+        records = []
+        for node_id in request.node_ids:
+            record = state.registry.get(node_id)
+            if record is None:
+                raise HTTPException(status_code=404, detail=f"unknown node {node_id}")
+            records.append(record)
+
+        validation = validate_members(records, state.topology)
+        if not validation.ok:
+            raise HTTPException(status_code=422, detail=validation.errors)
+
+        cluster = state.clusters.create(name, [r.node_id for r in records], validation.warnings)
+        return cluster_status(cluster, state.registry.get, _availability_of)
+
+    @app.get("/v1/clusters")
+    async def list_clusters() -> dict[str, Any]:
+        return {
+            "clusters": [
+                cluster_status(c, state.registry.get, _availability_of)
+                for c in state.clusters.all()
+            ]
+        }
+
+    @app.get("/v1/clusters/{cluster_id}")
+    async def get_cluster(cluster_id: str) -> dict[str, Any]:
+        cluster = state.clusters.get(cluster_id)
+        if cluster is None:
+            raise HTTPException(status_code=404, detail="unknown cluster")
+        return cluster_status(cluster, state.registry.get, _availability_of)
+
+    @app.post("/v1/clusters/{cluster_id}/validate")
+    async def validate_cluster(cluster_id: str) -> dict[str, Any]:
+        """Re-run the static checks against what the members report right now."""
+        cluster = state.clusters.get(cluster_id)
+        if cluster is None:
+            raise HTTPException(status_code=404, detail="unknown cluster")
+        records = [state.registry.get(n) for n in cluster.node_ids]
+        present = [r for r in records if r is not None]
+        missing = [n for n in cluster.node_ids if n not in {r.node_id for r in present}]
+        validation = validate_members(present, state.topology)
+        for node_id in missing:
+            validation.errors.append(f"{node_id} is no longer registered")
+        state.clusters.update_warnings(cluster, validation.warnings)
+        return {
+            "cluster_id": cluster_id,
+            "ok": validation.ok,
+            "errors": validation.errors,
+            "warnings": validation.warnings,
+            "missing": missing,
+        }
+
+    @app.delete("/v1/clusters/{cluster_id}")
+    async def delete_cluster(cluster_id: str) -> dict[str, Any]:
+        removed = state.clusters.remove(cluster_id)
+        return {"cluster_id": cluster_id, "removed": removed}
 
     # -- network measurement ---------------------------------------------
     #
