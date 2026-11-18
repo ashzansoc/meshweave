@@ -13,7 +13,7 @@ the project, **[U]** unknown, **[M]** measured in this repository.
 
 | | Native (MESHWEAVE) | Parallax | DeepSpeed-Inference | Dynamo |
 |---|---|---|
-| **Fits this environment** | yes | unproven (spike pending) | no | no |
+| **Fits this environment** | yes | blocked (16 GB disk) | no | no |
 | **Role in Float16** | default runtime | WAN candidate, pending spike | datacenter class A | production/regional serving |
 | **Splits weights across nodes** | yes, by layer | yes, by layer | no (TP only) | no (workers are whole) |
 | **Improves single-request tok/s** | n/a (baseline) | no | no | no |
@@ -88,11 +88,14 @@ the project, **[U]** unknown, **[M]** measured in this repository.
 hardware, and the only one where Float16 owns placement. Its gap is intelligence
 (equal splits, no replicas), not capability.
 
-**Parallax — candidate, pending evidence.** Architecturally the closest match:
-layer-range sharding, small activations, HF models, Apache-2.0. Blocked on an
-unknown: whether it runs on Turing at all. `deploy/parallax_spike.sh` settles it.
-If it works, the sensible integration is its single-node serving with Float16
-still choosing the split — not adopting its scheduler.
+**Parallax — candidate, blocked on this instance class.** Architecturally the
+closest match: layer-range sharding, small activations, HF models, Apache-2.0.
+The spike could not complete because `sglang[all]` plus torch needs more disk
+than a 16 GB Vast container has (8 GB of unpacking space alone; see
+`docs/PARALLAX_SPIKE_RESULT.md`). Whether it runs on Turing is therefore still
+**UNKNOWN** — not disproven. On a larger instance it remains the most plausible
+WAN backend, and the sensible integration would be its single-node serving with
+Float16 still choosing the split.
 
 **DeepSpeed-Inference — datacenter only.** Tensor parallelism is the only
 multi-node mode and it all-reduces per layer, which is fatal at 226 ms.

@@ -86,6 +86,18 @@ inference endpoint.
 Whatever the outcome, it goes into the compatibility matrix as a measured result
 rather than an assumption.
 
+## Outcome
+
+Run on `gpu-node-1` (RTX 2070 SUPER, sm_75): **blocked on disk**. The instance
+has 16 GB with 6.4 GB of base image, and the install needs about 8 GB of
+unpacking space plus several GB installed. It failed with
+`No space left on device` while installing `networkx`, after successfully
+downloading torch, cuDNN and cuBLAS.
+
+That is a node-specification result, not a hardware one: it says this instance
+class cannot host a stack of this size, not that Parallax fails on Turing. The
+full record is in `docs/PARALLAX_SPIKE_RESULT.md`.
+
 ## Not covered by this spike
 
 Multi-node operation, which needs its scheduler, Lattica and either direct
