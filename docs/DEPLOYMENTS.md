@@ -66,9 +66,9 @@ the numbers are in this repository.
 
 | Claim | Evidence | Status |
 |---|---|---|
-| Stage maths match the reference implementation | `tools/check_dense_parity.py`: single stage, 3-way split and a decode step all within 1.8e-07 of `transformers`, fp32 | measured |
+| Stage maths match the reference implementation | `tools/check_dense_parity.py` enforces a 1e-5 tolerance against `transformers`; the last recorded run measured 1.5e-07 for a single stage, a three-way split and a decode step, all in fp32 | measured (run output, not committed) |
 | A split model generates the same tokens as an unsplit one | `tools/check_pipeline.py`: two real processes, real TCP sockets, identical output | measured |
-| Weights are split, not replicated | stage 0 held 322 KiB, stage 1 145 KiB, stage 2 177 KiB of a 644 KiB model | measured |
+| Weights are split, not replicated | `tests/test_pipeline_runtime.py` asserts each stage loads only its own layers plus the embedding or head, and that the two footprints sum to less than two copies. The specific KiB figures printed by the parity tool depend on the tiny model it builds and are not committed | measured by test |
 | The agent starts a stage from a queued command and reports status | deployment API tests drive the real routes | measured (in-process) |
 | A node without a published TCP port is refused, by name | live `POST /v1/deployments` against the running coordinator | measured |
 | A real multi-host run over the current Vast links | blocked: the nodes do not all publish a TCP port | **blocked** |
@@ -84,7 +84,8 @@ only SSH.
 
 1. **A published TCP port**, not just SSH. Peers dial `external_ip:mapped_port`;
    a node behind NAT that accepts no connections cannot take part in a
-   multi-stage chain. The coordinator picks the lowest published port that is not
+   multi-stage chain. The coordinator prefers 10100 and 10200, and falls back to
+   the highest published port that is not
    22, so no configuration is needed beyond publishing one.
 2. **Disk for the whole checkpoint.** Shards are not split finely enough to
    download a single layer range, so every node downloads the full repository

@@ -2,11 +2,13 @@
 
 Measurement methodology, and what has actually been measured.
 
-**The short version: MESHWEAVE has produced no GPU benchmark results.** No GPU has
-been rented, no model has been executed across hosts, and no WAN link has been
-characterised. What follows separates *verified behaviour of the software* (measured
-in this repository, reproducible with `uv run pytest`) from *properties of the
-hardware and network* (not yet measured).
+**The short version: this document is out of date.** Earlier phases of the
+project did rent GPUs, did execute one model across three hosts, and did
+characterise every link. The measured results live in
+`docs/PHASE_2A_NETWORK_VALIDATION.md`, `PHASE_3B_THREE_HOST_DISTRIBUTED_INFERENCE.md`,
+`PHASE_3D_2_TCP_ANALYSIS.md`, `PHASE_4_1_CPU_OFFLOAD_COMPARISON.md`, and in the
+JSON under `benchmarks/`. What still separates *verified behaviour of the software*
+from *properties of the hardware and network* is the same rule it always was.
 
 Conflating the two is the exact failure this document exists to prevent.
 
