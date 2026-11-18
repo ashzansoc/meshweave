@@ -28,6 +28,8 @@ COORDINATOR=""
 TOKEN=""
 NODE_ID=""
 ENROLL=""
+PROVISION=""
+PROVISION_MODEL=""
 INSTALL_DIR="/opt/meshweave"
 CONFIG_DIR="/etc/meshweave"
 SERVICE_NAME="meshweave-agent"
@@ -57,6 +59,8 @@ while [ $# -gt 0 ]; do
     --token)       TOKEN="${2:-}"; shift 2 ;;
     --node-id)     NODE_ID="${2:-}"; shift 2 ;;
     --enroll)      ENROLL=1; shift ;;
+    --provision)   PROVISION=1; shift ;;
+    --model)       PROVISION_MODEL="${2:-}"; shift 2 ;;
     --uninstall)   UNINSTALL=1; shift ;;
     -h|--help)
       sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -572,6 +576,20 @@ EOF
 else
   warn "no service manager available (no systemd, no supervisor)"
   _start_detached
+fi
+
+# ── 7. optional inference stack ──────────────────────────────────────────
+if [ -n "$PROVISION" ]; then
+  log "provisioning the inference stack (this takes several minutes)"
+  PROVISION_ARGS=""
+  [ -n "$PROVISION_MODEL" ] && PROVISION_ARGS="--model $PROVISION_MODEL"
+  # shellcheck disable=SC2086
+  if curl -fsSL "https://raw.githubusercontent.com/ashzansoc/meshweave/main/deploy/provision.sh" \
+       | bash -s -- $PROVISION_ARGS; then
+    log "inference stack ready"
+  else
+    warn "provisioning failed; the agent is still registered and reporting"
+  fi
 fi
 
 cat <<EOF

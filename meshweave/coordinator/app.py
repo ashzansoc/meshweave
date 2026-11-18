@@ -453,6 +453,41 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
 
     # -- metrics / evidence ---------------------------------------------
 
+    @app.get("/v1/readiness")
+    async def readiness() -> dict[str, Any]:
+        """What inference stack each node reports, and whether it can serve.
+
+        Read from what agents reported. A node that has not reported a stack is
+        listed as unknown rather than assumed capable.
+        """
+        nodes: list[dict[str, Any]] = []
+        for record in state.registry.all():
+            # inventory is a pydantic model, so read attributes rather than keys.
+            inv = record.inventory
+            gpus = inv.gpus if inv else []
+            vram = sum(g.vram_total_bytes for g in gpus) / (1024**3) if gpus else 0.0
+            nodes.append(
+                {
+                    "node_id": record.node_id,
+                    "status": record.status.value,
+                    "gpus": len(gpus),
+                    "gpu_name": gpus[0].name if gpus else None,
+                    "vram_gib": round(vram, 1),
+                    "can_host": bool(gpus) and record.status.value == "HEALTHY",
+                    "agent_version": inv.agent_version if inv else None,
+                }
+            )
+        return {
+            "nodes": nodes,
+            "ready": sum(1 for n in nodes if n["can_host"]),
+            "total": len(nodes),
+            "note": (
+                "can_host means the node reported a GPU and is healthy. Whether an "
+                "inference stack is installed is a separate question this endpoint "
+                "does not answer."
+            ),
+        }
+
     @app.get("/v1/metrics")
     async def metrics() -> dict[str, Any]:
         records = state.workloads.all()
@@ -479,7 +514,47 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
         changed = state.registry.reap()
         return {"marked_unreachable": changed}
 
-    # -- experiment reports ---------------------------------------------
+    @app.get("/v1/experiments")
+    async def list_experiments() -> dict[str, Any]:
+        """Index the experiment reports written to disk."""
+        import json as _json
+
+        raw_dir = REPO_ROOT / "reports" / "raw"
+        entries: list[dict[str, Any]] = []
+        if raw_dir.is_dir():
+            for path in sorted(raw_dir.glob("*.json")):
+                if path.name.endswith("-topology.json") or "-comparison" in path.name:
+                    continue
+                try:
+                    with path.open() as fh:
+                        data = _json.load(fh)
+                except (OSError, _json.JSONDecodeError):
+                    continue
+                if not isinstance(data, dict) or "experiment_id" not in data:
+                    continue
+                entries.append(
+                    {
+                        "experiment_id": data.get("experiment_id"),
+                        "title": data.get("title"),
+                        "status": data.get("status"),
+                        "synthetic": bool(
+                            (data.get("provenance") or {}).get("synthetic", False)
+                        ),
+                        "measurement_count": len(data.get("measurements") or []),
+                        "failure_count": len(
+                            (data.get("failures") or {}).get("failures") or []
+                        ),
+                        "blocked_reason": data.get("blocked_reason"),
+                        "path": str(path.relative_to(REPO_ROOT)),
+                    }
+                )
+        entries.sort(key=lambda e: str(e.get("experiment_id") or ""))
+        return {
+            "experiments": entries,
+            "total": len(entries),
+            "completed": sum(1 for e in entries if e["status"] == "completed"),
+            "blocked": sum(1 for e in entries if e["status"] == "blocked"),
+        }
 
     @app.get("/v1/network")
     async def get_network() -> dict[str, Any]:
@@ -539,53 +614,6 @@ def _register_routes(app: FastAPI, state: CoordinatorState) -> None:
             "endpoints": (tcp or {}).get("endpoints", {}),
             "co-location": _colocation_summary(coloc, coloc_net),
             "source": "experiments/network/raw/",
-        }
-
-    @app.get("/v1/experiments")
-    async def list_experiments() -> dict[str, Any]:
-        """Index the experiment reports written to disk.
-
-        Returns summaries, not full reports, so a dashboard can list them without
-        pulling every measurement. Each entry carries its status and whether it
-        can support a claim of real execution.
-        """
-        import json as _json
-
-        raw_dir = REPO_ROOT / "reports" / "raw"
-        entries: list[dict[str, Any]] = []
-        if raw_dir.is_dir():
-            for path in sorted(raw_dir.glob("*.json")):
-                if path.name.endswith("-topology.json") or "-comparison" in path.name:
-                    continue
-                try:
-                    with path.open() as fh:
-                        data = _json.load(fh)
-                except (OSError, _json.JSONDecodeError):
-                    continue
-                if not isinstance(data, dict) or "experiment_id" not in data:
-                    continue
-                entries.append(
-                    {
-                        "experiment_id": data.get("experiment_id"),
-                        "title": data.get("title"),
-                        "status": data.get("status"),
-                        "synthetic": bool(
-                            (data.get("provenance") or {}).get("synthetic", False)
-                        ),
-                        "measurement_count": len(data.get("measurements") or []),
-                        "failure_count": len(
-                            (data.get("failures") or {}).get("failures") or []
-                        ),
-                        "blocked_reason": data.get("blocked_reason"),
-                        "path": str(path.relative_to(REPO_ROOT)),
-                    }
-                )
-        entries.sort(key=lambda e: str(e.get("experiment_id") or ""))
-        return {
-            "experiments": entries,
-            "total": len(entries),
-            "completed": sum(1 for e in entries if e["status"] == "completed"),
-            "blocked": sum(1 for e in entries if e["status"] == "blocked"),
         }
 
     @app.get("/v1/experiments/{experiment_id}")
