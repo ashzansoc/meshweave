@@ -93,6 +93,13 @@ if [ ! -x "$VENV/bin/parallax" ]; then
     warn "could not upgrade pip; continuing"
   fi
 
+  # Keep uv's cache and temp files inside the spike directory. Left to its
+  # defaults it puts a multi-gigabyte cache in /tmp, which filled the container's
+  # 16 GB disk on the first attempt.
+  export UV_CACHE_DIR="$ROOT/uv-cache"
+  export TMPDIR="$ROOT/tmp"
+  mkdir -p "$UV_CACHE_DIR" "$TMPDIR"
+
   # Large CUDA wheels fail part-way over a slow link. uv resumes partial
   # downloads, so retry instead of starting over: each attempt picks up where
   # the last one stopped.
